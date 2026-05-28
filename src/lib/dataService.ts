@@ -170,6 +170,8 @@ function normalizeFarmerRecords(input: unknown): FarmerRecord[] {
       name: String(row.name ?? ""),
       mobile: String(row.mobile ?? row.phone ?? ""),
       aadhaar: String(row.aadhaar ?? ""),
+      accountNumber: String(row.accountNumber ?? ""),
+      rationCard: String(row.rationCard ?? ""),
       address: String(row.address ?? ""),
       village: String(row.village ?? "Unknown"),
       totalAnimals: toNumber(row.totalAnimals ?? row.animals),

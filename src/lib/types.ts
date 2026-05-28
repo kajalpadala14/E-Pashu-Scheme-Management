@@ -279,6 +279,8 @@ export interface FarmerRecord extends Partial<Record<string, any>> {
   name: string;
   mobile: string;
   aadhaar?: string;
+  accountNumber?: string;
+  rationCard?: string;
   address?: string;
   village?: string;
   totalAnimals?: number;

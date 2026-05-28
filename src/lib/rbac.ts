@@ -8,8 +8,10 @@ export type AppRouteKey =
   | "breeding"
   | "alerts"
   | "field_officers"
+  | "employees"
   | "ai_insights"
   | "reports"
+  | "schemes"
   | "profile";
 
 const routePermissions: Record<AppRouteKey, UserRole[]> = {
@@ -20,8 +22,10 @@ const routePermissions: Record<AppRouteKey, UserRole[]> = {
   breeding: ["admin", "veterinary_doctor"],
   alerts: ["admin", "veterinary_doctor", "field_officer"],
   field_officers: ["admin", "veterinary_doctor", "field_officer"],
+  employees: ["admin"],
   ai_insights: ["admin", "veterinary_doctor"],
   reports: ["admin", "veterinary_doctor", "field_officer"],
+  schemes: ["admin", "veterinary_doctor", "field_officer"],
   profile: ["admin", "veterinary_doctor", "field_officer"],
 };
 

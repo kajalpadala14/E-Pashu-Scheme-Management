@@ -30,6 +30,8 @@ const blank: FarmerRecord = {
   tehsil: defaultAdministrativeArea.tehsil,
   block: defaultAdministrativeArea.block,
   gramPanchayat: defaultAdministrativeArea.gramPanchayat,
+  accountNumber: "",
+  rationCard: "",
   village: "",
   totalAnimals: 0,
   loanStatus: "No Loan",
@@ -63,7 +65,7 @@ const FarmersPage = () => {
   });
 
   const filtered = useMemo(() => records.filter((item) =>
-    [item.id, item.name, item.mobile, areaForRecord(item).district, areaForRecord(item).tehsil, areaForRecord(item).block, areaForRecord(item).gramPanchayat, areaForRecord(item).village, item.governmentScheme, item.ownerType]
+    [item.id, item.name, item.mobile, item.accountNumber, item.rationCard, areaForRecord(item).district, areaForRecord(item).tehsil, areaForRecord(item).block, areaForRecord(item).gramPanchayat, areaForRecord(item).village, item.governmentScheme, item.ownerType]
       .some((value) => value.toLowerCase().includes(search.toLowerCase()))
       && matchesAdministrativeFilter(item, areaFilter)
       && (loanFilter === "All" || item.loanStatus === loanFilter)
@@ -114,6 +116,8 @@ const FarmersPage = () => {
                 <div><Label>Name</Label><Input value={form.name} onChange={(e) => setForm((p) => ({ ...p, name: e.target.value }))} /></div>
                 <div><Label>Mobile</Label><Input inputMode="numeric" maxLength={10} value={form.mobile} onChange={(e) => setForm((p) => ({ ...p, mobile: sanitizeIndianMobileInput(e.target.value) }))} /></div>
                 <div><Label>Aadhaar</Label><Input value={form.aadhaar} onChange={(e) => setForm((p) => ({ ...p, aadhaar: e.target.value }))} /></div>
+                <div><Label>Account Number</Label><Input value={form.accountNumber} onChange={(e) => setForm((p) => ({ ...p, accountNumber: e.target.value }))} /></div>
+                <div><Label>Ration Card</Label><Input value={form.rationCard} onChange={(e) => setForm((p) => ({ ...p, rationCard: e.target.value }))} /></div>
                 <div className="md:col-span-3">
                   <div className="mb-2 text-sm font-medium">Owner Administrative Area</div>
                     <AdminAreaSelect
@@ -201,6 +205,8 @@ const FarmersPage = () => {
                     <TableHead>Farmer</TableHead>
                     <TableHead>Mobile</TableHead>
                     <TableHead>Aadhaar</TableHead>
+                    <TableHead>Account</TableHead>
+                    <TableHead>Ration Card</TableHead>
                     <TableHead>Administrative Area</TableHead>
                     <TableHead>Animals</TableHead>
                     <TableHead>Loan</TableHead>
@@ -215,6 +221,8 @@ const FarmersPage = () => {
                       <TableCell><div className="font-medium">{item.name}</div><div className="text-xs text-muted-foreground">{item.id} · {item.ownerType}</div></TableCell>
                       <TableCell>{item.mobile}</TableCell>
                       <TableCell>{item.aadhaar}</TableCell>
+                      <TableCell>{item.accountNumber}</TableCell>
+                      <TableCell>{item.rationCard}</TableCell>
                       <TableCell>
                         <div>{areaForRecord(item).village}</div>
                         <div className="text-xs text-muted-foreground">{areaForRecord(item).block} / {areaForRecord(item).gramPanchayat}</div>

@@ -16,6 +16,8 @@ import AlertsPage from "./pages/AlertsPage.tsx";
 import FieldOfficersPage from "./pages/FieldOfficersPage.tsx";
 import AIInsightsPage from "./pages/AIInsightsPage.tsx";
 import ReportsPage from "./pages/ReportsPage.tsx";
+import SchemesPage from "./pages/SchemesPage.tsx";
+import EmployeesPage from "./pages/EmployeesPage.tsx";
 import ProfilePage from "./pages/ProfilePage.tsx";
 import LoginPage from "./pages/LoginPage.tsx";
 import NotFound from "./pages/NotFound.tsx";
@@ -66,8 +68,10 @@ const App = () => (
             <Route path="/breeding" element={<RoleRoute route="breeding"><BreedingPage /></RoleRoute>} />
             <Route path="/alerts" element={<RoleRoute route="alerts"><AlertsPage /></RoleRoute>} />
             <Route path="/field-officers" element={FEATURES.ENABLE_LIVE_MONITORING ? <RoleRoute route="field_officers"><FieldOfficersPage /></RoleRoute> : <NotFound />} />
+            <Route path="/employees" element={<RoleRoute route="employees"><EmployeesPage /></RoleRoute>} />
             <Route path="/ai-insights" element={<RoleRoute route="ai_insights"><AIInsightsPage /></RoleRoute>} />
             <Route path="/reports" element={<RoleRoute route="reports"><ReportsPage /></RoleRoute>} />
+            <Route path="/schemes" element={<RoleRoute route="schemes"><SchemesPage /></RoleRoute>} />
             <Route path="/profile" element={<RoleRoute route="profile"><ProfilePage /></RoleRoute>} />
             <Route path="*" element={<NotFound />} />
           </Routes>

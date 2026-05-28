@@ -8,6 +8,7 @@ import {
   UserCheck,
   BarChart3,
   Stethoscope,
+  ShoppingBag,
 } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import { useLocation } from "react-router-dom";
@@ -30,6 +31,8 @@ const mainItems = [
   { title: "Dashboard", url: "/", icon: LayoutDashboard, route: "dashboard" as AppRouteKey, enabled: FEATURES.ENABLE_DASHBOARD },
   { title: "Animals", url: "/animals", icon: PawPrint, route: "animals" as AppRouteKey, enabled: true },
   { title: "Farmers", url: "/farmers", icon: Users, route: "farmers" as AppRouteKey, enabled: true },
+  { title: "Employees", url: "/employees", icon: Users, route: "employees" as AppRouteKey, enabled: true },
+  { title: "Schemes", url: "/schemes", icon: ShoppingBag, route: "schemes" as AppRouteKey, enabled: true },
   { title: "Vaccinations", url: "/vaccinations", icon: Syringe, route: "vaccinations" as AppRouteKey, enabled: true },
   { title: "Disease Care", url: "/ai-insights", icon: Stethoscope, route: "ai_insights" as AppRouteKey, enabled: true },
   { title: "Breeding", url: "/breeding", icon: Dna, route: "breeding" as AppRouteKey, enabled: true },

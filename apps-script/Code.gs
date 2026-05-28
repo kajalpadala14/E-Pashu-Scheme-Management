@@ -35,7 +35,7 @@ DEFAULT_SHEET_HEADERS[SHEETS.SUPERVISOR_VERIFICATIONS] = ["id","officerName","vi
 DEFAULT_SHEET_HEADERS[SHEETS.ACTIVITIES] = ["action","detail","time"];
 DEFAULT_SHEET_HEADERS[SHEETS.TRENDS] = ["month","vaccinations"];
 DEFAULT_SHEET_HEADERS[SHEETS.HEALTH_STATUS] = ["name","value","fill"];
-DEFAULT_SHEET_HEADERS[SHEETS.HEALTH_RECORDS] = ["id","animalId","date","condition","diagnosis","notes","status","recordDate"];
+DEFAULT_SHEET_HEADERS[SHEETS.HEALTH_RECORDS] = ["id","animalId","date","condition","diagnosis","symptoms","treatment","doctorName","medicine","recoveryStatus","isolationStatus","criticalAlert","notes","status","recordDate"];
 DEFAULT_SHEET_HEADERS[SHEETS.MONTHLY_ACTIVITY] = ["month","registered","vaccinated","alerts"];
 DEFAULT_SHEET_HEADERS[SHEETS.USERS] = ["id","name","email","role","region","active","createdAt","updatedAt"];
 DEFAULT_SHEET_HEADERS[SHEETS.PHOTO_EVIDENCE] = ["id","animalId","tagId","officerName","district","tehsil","block","gramPanchayat","village","latitude","longitude","capturedAt","capturedDate","capturedTime","module","caption","photoUrl","driveFileId","driveFileUrl","fileName","verificationStatus","submittedAt"];
@@ -511,13 +511,59 @@ function createHealthRecord_(input) {
     date: input.date || formatDate_(new Date()),
     condition: input.diseaseName,
     diagnosis: input.diagnosis || input.diseaseName,
-    notes: [input.symptoms || "", input.treatment || "", input.medicine || "", input.notes || ""].filter(function (value) { return String(value || "").trim(); }).join(" | "),
+    symptoms: input.symptoms || "",
+    treatment: input.treatment || "",
+    doctorName: input.doctorName || "",
+    medicine: input.medicine || "",
+    recoveryStatus: input.recoveryStatus || "Under Treatment",
+    isolationStatus: input.isolationStatus || "Not Required",
+    criticalAlert: input.criticalAlert === true || String(input.recoveryStatus || "").toLowerCase() === "critical",
+    notes: input.notes || "",
     status: input.recoveryStatus || "Under Treatment",
     recordDate: input.date || formatDate_(new Date())
   };
 
+  var sheet = getSheet_(SHEETS.HEALTH_RECORDS);
+  ensureHeaders_(sheet, Object.keys(row));
   appendRow_(SHEETS.HEALTH_RECORDS, row);
+
+  if (String(input.recoveryStatus || "").toLowerCase() === "critical") {
+    updateAnimalStatus_(input.animalId, "Critical");
+  } else if (String(input.recoveryStatus || "").toLowerCase() === "recovered") {
+    updateAnimalStatus_(input.animalId, "Healthy");
+  }
+
   return row;
+}
+
+function updateAnimalStatus_(animalId, newStatus) {
+  if (!animalId || !newStatus) {
+    return;
+  }
+
+  var sheet = getSheet_(SHEETS.ANIMALS);
+  if (!sheet) {
+    return;
+  }
+
+  var data = sheet.getDataRange().getValues();
+  if (!data || data.length < 2) {
+    return;
+  }
+
+  var headers = data[0];
+  var idIndex = findColumnIndex_(headers, "id");
+  var statusIndex = findColumnIndex_(headers, "status");
+  if (idIndex < 0 || statusIndex < 0) {
+    return;
+  }
+
+  for (var i = 1; i < data.length; i++) {
+    if (String(data[i][idIndex]) === String(animalId)) {
+      sheet.getRange(i + 1, statusIndex + 1).setValue(newStatus);
+      return;
+    }
+  }
 }
 
 function updatePregnancyStatus_(id, status) {
