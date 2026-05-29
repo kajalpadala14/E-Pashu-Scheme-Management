@@ -10,6 +10,7 @@ import Index from "./pages/Index.tsx";
 import AnimalsPage from "./pages/AnimalsPage.tsx";
 import AnimalProfilePage from "./pages/AnimalProfilePage.tsx";
 import FarmersPage from "./pages/FarmersPage.tsx";
+import LocationMasterPage from "./pages/LocationMasterPage.tsx";
 import VaccinationsPage from "./pages/VaccinationsPage.tsx";
 import BreedingPage from "./pages/BreedingPage.tsx";
 import AlertsPage from "./pages/AlertsPage.tsx";
@@ -64,6 +65,7 @@ const App = () => (
             <Route path="/animals" element={<RoleRoute route="animals"><AnimalsPage /></RoleRoute>} />
             <Route path="/animals/:id" element={<RoleRoute route="animals"><AnimalProfilePage /></RoleRoute>} />
             <Route path="/farmers" element={<RoleRoute route="farmers"><FarmersPage /></RoleRoute>} />
+            <Route path="/locations" element={<RoleRoute route="locations"><LocationMasterPage /></RoleRoute>} />
             <Route path="/vaccinations" element={<RoleRoute route="vaccinations"><VaccinationsPage /></RoleRoute>} />
             <Route path="/breeding" element={<RoleRoute route="breeding"><BreedingPage /></RoleRoute>} />
             <Route path="/alerts" element={<RoleRoute route="alerts"><AlertsPage /></RoleRoute>} />

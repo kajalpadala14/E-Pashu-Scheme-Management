@@ -32,11 +32,17 @@ const defaultUsers: Record<UserRole, SessionUser> = {
     region: "",
     email: "fo.rampur@epashu.gov",
   },
-  data_entry_operator: {
-    name: "Anita Sharma",
-    role: "data_entry_operator",
+  departmental_officer: {
+    name: "Manoj Kumar",
+    role: "departmental_officer",
     region: "",
-    email: "deo@epashu.gov",
+    email: "departmental@epashu.gov",
+  },
+  deputy_director_vet: {
+    name: "Dr. Neha Singh",
+    role: "deputy_director_vet",
+    region: "",
+    email: "deputy.director@epashu.gov",
   },
 };
 

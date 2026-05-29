@@ -11,8 +11,8 @@ import { useUser } from "@/contexts/UserContext";
 
 const LoginPage = () => {
   const navigate = useNavigate();
-  const { user, setUser } = useUser();
-  const [email, setEmail] = useState(user?.email || "admin@epashu.gov");
+  const { setUser } = useUser();
+  const [email, setEmail] = useState("admin@epashu.gov");
 
   const loginMutation = useMutation({
     mutationFn: lookupUserByEmail,

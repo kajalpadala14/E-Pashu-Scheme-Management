@@ -18,6 +18,12 @@ Create one Google Sheet and add these tabs with exact headers in row 1:
 
 Add your real data rows under each header (demo/mock is not used by frontend now).
 
+Add a `Locations` tab for the centralized area master with these headers in row 1:
+
+- `Locations`: `district,tehsil,block,gramPanchayat,village,status`
+
+The frontend uses this tab as the first source for district/block/panchayat/village dropdowns. If the tab is empty, older record-derived options still work as a fallback.
+
 ## 2) Create Apps Script Project
 1. Open script.google.com.
 2. Create a new project.

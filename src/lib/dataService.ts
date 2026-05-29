@@ -8,6 +8,7 @@ import type {
   DiseaseTreatmentRecord,
   Farmer,
   FieldOfficerTask,
+  LocationRecord,
   EmergencyReport,
   GeoTaggedPhotoEvidence,
   PregnancyRecord,
@@ -43,6 +44,7 @@ function getRequestMeta(): Record<string, string> {
     return {};
   }
 }
+
 
 const HEALTH_COLOR_MAP: Record<string, string> = {
   healthy: "hsl(152, 60%, 40%)",
@@ -265,6 +267,25 @@ function normalizeDiseaseTreatmentRecords(input: unknown): DiseaseTreatmentRecor
       isolationStatus: String(row.isolationStatus ?? "Not Required") === "Isolated" ? "Isolated" : "Not Required",
       criticalAlert: String(row.criticalAlert ?? "false").toLowerCase() === "true" || recoveryStatus === "Critical",
       notes: String(row.notes ?? ""),
+    };
+  });
+}
+
+function normalizeLocations(input: unknown): LocationRecord[] {
+  if (!Array.isArray(input)) {
+    return [];
+  }
+
+  return input.map((item, idx) => {
+    const row = (item ?? {}) as Record<string, unknown>;
+    return {
+      id: String(row.id ?? String(idx + 2)),
+      district: String(row.district ?? ""),
+      tehsil: String(row.tehsil ?? ""),
+      block: String(row.block ?? ""),
+      gramPanchayat: String(row.gramPanchayat ?? ""),
+      village: String(row.village ?? ""),
+      status: String(row.status ?? "Active"),
     };
   });
 }
@@ -701,6 +722,25 @@ export async function listBreedingRecords(): Promise<BreedingRecord[]> {
   return normalizeBreedingRecords(raw);
 }
 
+export async function listLocations(): Promise<LocationRecord[]> {
+  const raw = await callAppsScript<unknown>("locations.list");
+  return normalizeLocations(raw);
+}
+
+export async function createLocation(input: Omit<LocationRecord, "id">): Promise<LocationRecord> {
+  const raw = await callAppsScript<unknown>("locations.create", { input });
+  return normalizeLocations([raw])[0] || { id: String(Date.now()), ...input };
+}
+
+export async function updateLocation(input: LocationRecord): Promise<LocationRecord> {
+  const raw = await callAppsScript<unknown>("locations.update", { input });
+  return normalizeLocations([raw])[0] || input;
+}
+
+export async function deleteLocation(id: string, input?: Partial<LocationRecord>): Promise<{ id: string; deleted: boolean }> {
+  return callAppsScript<{ id: string; deleted: boolean }>("locations.delete", { id, input });
+}
+
 export async function listAlerts(): Promise<AlertItem[]> {
   const raw = await callAppsScript<unknown>("alerts.list");
   return normalizeAlerts(raw);
@@ -731,6 +771,33 @@ export async function createDiseaseTreatmentRecord(input: Omit<DiseaseTreatmentR
 
 export async function listFieldOfficerTasks(): Promise<FieldOfficerTask[]> {
   return callAppsScript<FieldOfficerTask[]>("tasks.list");
+}
+
+export async function createFieldTask(input: { task: string; village?: string; officerId?: string; status?: string; target?: number; completed?: boolean }) {
+  const raw = await callAppsScript<unknown>("tasks.create", { input });
+  return normalizeFieldOfficerTask(raw);
+}
+
+export async function fetchPhotoDataUrl(driveFileId: string): Promise<string> {
+  if (!driveFileId) throw new Error('driveFileId required');
+  const data = await callAppsScript<string>('photo.fetch', { input: { id: driveFileId } });
+  return data;
+}
+
+function normalizeFieldOfficerTask(input: unknown): FieldOfficerTask {
+  const row = (input || {}) as Record<string, unknown>;
+  const rawCompleted = row.completed ?? 0;
+  const completedNumber = typeof rawCompleted === "number" ? Number(rawCompleted) : (String(rawCompleted).toLowerCase() === "true" ? 1 : Number(rawCompleted) || 0);
+  return {
+    id: Number(row.id || 0),
+    task: String(row.task || row.title || ""),
+    village: String(row.village || ""),
+    // completed stored as count when available, otherwise boolean -> convert to 1/0
+    completed: completedNumber,
+    officerId: String(row.officerId || ""),
+    status: String(row.status || "Open"),
+    target: Number(row.target || 0),
+  };
 }
 
 export async function listFieldOfficers(): Promise<FieldOfficerRecord[]> {
@@ -827,7 +894,8 @@ export async function listUsers(): Promise<UserDirectoryRecord[]> {
 }
 
 export async function lookupUserByEmail(email: string): Promise<UserDirectoryRecord> {
-  const raw = await callAppsScript<unknown>("users.lookupByEmail", { email });
+  const normalizedEmail = String(email || "").trim().toLowerCase();
+  const raw = await callAppsScript<unknown>("users.lookupByEmail", { email: normalizedEmail });
   return normalizeUsers([raw])[0];
 }
 

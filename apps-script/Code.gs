@@ -1,6 +1,7 @@
 var SHEETS = {
   ANIMALS: "Animals",
   FARMERS: "Farmers",
+  LOCATIONS: "Locations",
   VACCINATIONS: "Vaccinations",
   BREEDING: "Breeding",
   PREGNANCY: "Pregnancy",
@@ -24,12 +25,15 @@ var SHEETS = {
 var DEFAULT_SHEET_HEADERS = {};
 DEFAULT_SHEET_HEADERS[SHEETS.ANIMALS] = ["id","earTag","qrCode","taggingDate","dataEntryDate","sireId","damId","species","breed","gender","dob","age","ageMonths","color","weight","milkingStatus","pregnancyStatus","calvings","vaccinationStatus","diseaseStatus","treatmentHistory","photo","ownerName","owner","village","district","tehsil","block","gramPanchayat","status","notes","productionData"];
 DEFAULT_SHEET_HEADERS[SHEETS.FARMERS] = ["id","name","mobile","phone","aadhaar","address","village","district","tehsil","block","gramPanchayat","animals","totalAnimals","loanStatus","insuranceStatus","governmentScheme","ownerType"];
+DEFAULT_SHEET_HEADERS[SHEETS.LOCATIONS] = ["district","tehsil","block","gramPanchayat","village","status"];
 DEFAULT_SHEET_HEADERS[SHEETS.VACCINATIONS] = ["id","animalId","vaccine","batchNumber","date","nextReminder","status","administeredBy","smsReminder","notes"];
 DEFAULT_SHEET_HEADERS[SHEETS.PREGNANCY] = ["id","animalId","village","inseminationDate","expectedCalving","status","lastCheckDate","notes"];
 DEFAULT_SHEET_HEADERS[SHEETS.BREEDING] = ["id","animalId","inseminationDate","expectedCalving","status","notes"];
 DEFAULT_SHEET_HEADERS[SHEETS.ALERTS] = ["id","message","priority","type","time"];
 DEFAULT_SHEET_HEADERS[SHEETS.REMINDERS] = ["id","village","recipient","channel","message","dueDate","status","sentAt"];
 DEFAULT_SHEET_HEADERS[SHEETS.TASKS] = ["id","task","village","completed"];
+// Extend TASKS headers to support officer, status and target columns used by UI
+DEFAULT_SHEET_HEADERS[SHEETS.TASKS] = ["id","task","village","completed","officerId","status","target"];
 DEFAULT_SHEET_HEADERS[SHEETS.FIELD_OFFICERS] = ["id","name","phone","village","role","assignedVillages","currentVillage","latitude","longitude","lastActive","visitStatus","gpsTracking","visitReports","attendance"];
 DEFAULT_SHEET_HEADERS[SHEETS.SUPERVISOR_VERIFICATIONS] = ["id","officerName","village","district","tehsil","block","gramPanchayat","visitVerified","photoApproved","reportApproved","fakeVisitFlag"];
 DEFAULT_SHEET_HEADERS[SHEETS.ACTIVITIES] = ["action","detail","time"];
@@ -48,8 +52,12 @@ var DEFAULT_PHOTO_FOLDER_NAME = "e-pashu-photos";
 
 var ROLE_ACTIONS = {
   admin: ["*"],
-  veterinary_doctor: [
+  veterinary_doctor: ["*"],
+  departmental_officer: ["*"],
+  deputy_director_vet: ["*"],
+  field_officer: [
     "dashboard.get",
+    "locations.list",
     "animals.list",
     "animals.create",
     "animals.delete",
@@ -83,22 +91,6 @@ var ROLE_ACTIONS = {
     "users.lookupByEmail",
     "users.list"
   ],
-  field_officer: [
-    "dashboard.get",
-    "alerts.list",
-    "fieldOfficers.list",
-    "tasks.list",
-    "tasks.toggle",
-    "photoEvidence.list",
-    "photoEvidence.create",
-    "dailyReports.list",
-    "dailyReports.create",
-    "emergencies.list",
-    "emergencies.create",
-    "users.lookupByEmail",
-    "users.list",
-    "reports.list"
-  ],
   data_entry_operator: []
 };
 
@@ -127,6 +119,18 @@ function doPost(e) {
     switch (action) {
       case "dashboard.get":
         data = getDashboardData_();
+        break;
+      case "locations.list":
+        data = listLocations_();
+        break;
+      case "locations.create":
+        data = createLocation_(payload.input);
+        break;
+      case "locations.update":
+        data = updateLocation_(payload.input);
+        break;
+      case "locations.delete":
+        data = deleteLocation_(payload.id, payload.input);
         break;
       case "animals.list":
         data = listRows_(SHEETS.ANIMALS);
@@ -212,6 +216,9 @@ function doPost(e) {
       case "photoEvidence.create":
         data = createPhotoEvidence_(payload.input);
         break;
+      case "photo.fetch":
+        data = fetchPhotoDataUrl_(payload.input);
+        break;
       case "dailyReports.list":
         data = listRows_(SHEETS.DAILY_REPORTS);
         break;
@@ -230,6 +237,9 @@ function doPost(e) {
           row.completed = toBool_(row.completed);
           return row;
         });
+        break;
+      case "tasks.create":
+        data = createTask_(payload.input);
         break;
       case "fieldOfficers.list":
         data = listRows_(SHEETS.FIELD_OFFICERS);
@@ -1004,6 +1014,120 @@ function listRows_(sheetName) {
   });
 }
 
+function listLocations_() {
+  var sheet = getSheet_(SHEETS.LOCATIONS);
+  var values = sheet.getDataRange().getValues();
+
+  if (!values || values.length < 2) {
+    return [];
+  }
+
+  var headers = values[0];
+  return values.slice(1).map(function (row, idx) {
+    var item = { id: String(idx + 2) };
+    headers.forEach(function (header, colIdx) {
+      item[normalizeKey_(header)] = row[colIdx];
+    });
+    item.status = item.status || "Active";
+    return item;
+  });
+}
+
+function createLocation_(input) {
+  if (!input || !input.district || !input.tehsil || !input.block || !input.gramPanchayat || !input.village) {
+    throw new Error("Invalid location input");
+  }
+
+  var row = {
+    district: String(input.district || "").trim(),
+    tehsil: String(input.tehsil || "").trim(),
+    block: String(input.block || "").trim(),
+    gramPanchayat: String(input.gramPanchayat || "").trim(),
+    village: String(input.village || "").trim(),
+    status: String(input.status || "Active").trim() || "Active"
+  };
+
+  appendRowWithHeaders_(SHEETS.LOCATIONS, DEFAULT_SHEET_HEADERS[SHEETS.LOCATIONS], row);
+  return { id: String(getSheet_(SHEETS.LOCATIONS).getLastRow()), district: row.district, tehsil: row.tehsil, block: row.block, gramPanchayat: row.gramPanchayat, village: row.village, status: row.status };
+}
+
+function updateLocation_(input) {
+  if (!input) {
+    throw new Error("Invalid location input");
+  }
+
+  var sheet = getSheet_(SHEETS.LOCATIONS);
+  var values = sheet.getDataRange().getValues();
+  if (!values || values.length < 2) {
+    throw new Error("No locations found");
+  }
+
+  var targetRow = findLocationRow_(values, input);
+  if (targetRow === -1) {
+    throw new Error("Location not found");
+  }
+
+  var headers = values[0];
+  var row = {
+    district: String(input.district || values[targetRow - 1][findColumnIndex_(headers, "district")]).trim(),
+    tehsil: String(input.tehsil || values[targetRow - 1][findColumnIndex_(headers, "tehsil")]).trim(),
+    block: String(input.block || values[targetRow - 1][findColumnIndex_(headers, "block")]).trim(),
+    gramPanchayat: String(input.gramPanchayat || values[targetRow - 1][findColumnIndex_(headers, "gramPanchayat")]).trim(),
+    village: String(input.village || values[targetRow - 1][findColumnIndex_(headers, "village")]).trim(),
+    status: String(input.status || values[targetRow - 1][findColumnIndex_(headers, "status")] || "Active").trim() || "Active"
+  };
+
+  sheet.getRange(targetRow, 1, 1, DEFAULT_SHEET_HEADERS[SHEETS.LOCATIONS].length).setValues([[row.district, row.tehsil, row.block, row.gramPanchayat, row.village, row.status]]);
+  return { id: String(targetRow), district: row.district, tehsil: row.tehsil, block: row.block, gramPanchayat: row.gramPanchayat, village: row.village, status: row.status };
+}
+
+function deleteLocation_(id, input) {
+  var sheet = getSheet_(SHEETS.LOCATIONS);
+  var values = sheet.getDataRange().getValues();
+  if (!values || values.length < 2) {
+    throw new Error("No locations found");
+  }
+
+  var targetRow = Number(id || (input && input.id) || 0);
+  if (!targetRow || targetRow < 2) {
+    targetRow = findLocationRow_(values, input);
+  }
+
+  if (!targetRow || targetRow < 2) {
+    throw new Error("Location not found");
+  }
+
+  sheet.deleteRow(targetRow);
+  return { id: String(targetRow), deleted: true };
+}
+
+function findLocationRow_(values, input) {
+  if (!values || values.length < 2 || !input) {
+    return -1;
+  }
+
+  var headers = values[0];
+  var districtIdx = findColumnIndex_(headers, "district");
+  var tehsilIdx = findColumnIndex_(headers, "tehsil");
+  var blockIdx = findColumnIndex_(headers, "block");
+  var gramIdx = findColumnIndex_(headers, "gramPanchayat");
+  var villageIdx = findColumnIndex_(headers, "village");
+
+  for (var i = 1; i < values.length; i++) {
+    if (
+      String(values[i][districtIdx]) === String(input.district || "") &&
+      String(values[i][tehsilIdx]) === String(input.tehsil || "") &&
+      String(values[i][blockIdx]) === String(input.block || "") &&
+      String(values[i][gramIdx]) === String(input.gramPanchayat || "") &&
+      String(values[i][villageIdx]) === String(input.village || "")
+    ) {
+      return i + 1;
+    }
+  }
+
+  return -1;
+}
+
 function appendRow_(sheetName, data) {
   var sheet = getSheet_(sheetName);
   var headers = sheet.getDataRange().getValues()[0];
@@ -1192,10 +1316,16 @@ function normalizeRole_(role) {
   if (value === "admin") {
     return "admin";
   }
-  if (value === "veterinary" || value === "veterinary_doctor") {
+  if (value === "veterinary" || value === "veterinary_doctor" || value === "veterinary doctor") {
     return "veterinary_doctor";
   }
-  if (value === "data_entry" || value === "data_entry_operator") {
+  if (value === "departmental_officer" || value === "departmental officer") {
+    return "departmental_officer";
+  }
+  if (value === "deputy_director_vet" || value === "deputy director vet") {
+    return "deputy_director_vet";
+  }
+  if (value === "data_entry" || value === "data_entry_operator" || value === "field_officer" || value === "field officer") {
     return "field_officer";
   }
   return "field_officer";
@@ -1265,9 +1395,9 @@ function createPhotoEvidence_(input) {
     capturedTime: Utilities.formatDate(new Date(capturedAt), Session.getScriptTimeZone(), "HH:mm:ss"),
     module: input.module || "Vaccination",
     caption: input.caption || "",
-    photoUrl: image.url,
+    photoUrl: image.viewUrl || image.url,
     driveFileId: image.id,
-    driveFileUrl: image.url,
+    driveFileUrl: image.viewUrl || image.url,
     fileName: image.name,
     verificationStatus: input.verificationStatus || "Pending",
     submittedAt: new Date().toISOString()
@@ -1299,6 +1429,42 @@ function createPhotoEvidence_(input) {
   ], row);
 
   return row;
+}
+
+function createTask_(input) {
+  if (!input || !input.task) {
+    throw new Error('Invalid task input');
+  }
+
+  var id = input.id || ('TSK-' + new Date().getTime());
+  var row = {
+    id: id,
+    task: input.task || '',
+    village: input.village || '',
+    completed: input.completed ? 'true' : 'false',
+    officerId: input.officerId || '',
+    status: input.status || 'Open',
+    target: input.target || 0
+  };
+
+  appendRowWithHeaders_(SHEETS.TASKS, DEFAULT_SHEET_HEADERS[SHEETS.TASKS], row);
+  return row;
+}
+
+function fetchPhotoDataUrl_(input) {
+  if (!input || !input.id) {
+    throw new Error('Missing file id');
+  }
+  var fileId = input.id;
+  try {
+    var file = DriveApp.getFileById(fileId);
+    var blob = file.getBlob();
+    var mime = blob.getContentType() || 'image/jpeg';
+    var base64 = Utilities.base64Encode(blob.getBytes());
+    return 'data:' + mime + ';base64,' + base64;
+  } catch (e) {
+    throw new Error('Unable to read file from Drive: ' + (e && e.message));
+  }
 }
 
 function createDailyFieldReport_(input) {
@@ -1391,9 +1557,11 @@ function savePhotoToDrive_(dataUrl, fileName) {
   var file = folder.createFile(blob);
   file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
 
+  var viewUrl = 'https://drive.google.com/uc?export=view&id=' + file.getId();
   return {
     id: file.getId(),
     url: file.getUrl(),
+    viewUrl: viewUrl,
     name: file.getName()
   };
 }

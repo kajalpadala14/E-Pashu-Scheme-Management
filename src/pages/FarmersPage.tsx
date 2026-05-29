@@ -12,11 +12,12 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import type { FarmerRecord } from "@/lib/types";
-import { Landmark, Phone, Plus, Search, ShieldCheck, Users } from "lucide-react";
+import { Landmark, MapPinned, Phone, Plus, Search, ShieldCheck, Users } from "lucide-react";
 import { toast } from "@/components/ui/use-toast";
 import { AdminAreaSelect } from "@/components/AdminAreaSelect";
 import { allAdministrativeFilter, areaForRecord, buildAdministrativeOptions, defaultAdministrativeArea, matchesAdministrativeFilter, type AdministrativeArea, type AdministrativeFilter } from "@/lib/adminHierarchy";
-import { createFarmerRecord, listFarmerRecords } from "@/lib/dataService";
+import { createFarmerRecord, listFarmerRecords, listLocations } from "@/lib/dataService";
+import type { LocationRecord } from "@/lib/types";
 import { isValidIndianMobile, sanitizeIndianMobileInput } from "@/lib/phone";
 import { buildWhatsAppUrl } from "@/lib/phone";
 
@@ -43,6 +44,7 @@ const blank: FarmerRecord = {
 const FarmersPage = () => {
   const queryClient = useQueryClient();
   const { data: records = [] } = useQuery({ queryKey: ["farmerRecords"], queryFn: listFarmerRecords, initialData: [] as FarmerRecord[] });
+  const { data: locations = [] } = useQuery({ queryKey: ["locations"], queryFn: listLocations, initialData: [] as LocationRecord[] });
   const [search, setSearch] = useState("");
   const [loanFilter, setLoanFilter] = useState("All");
   const [insuranceFilter, setInsuranceFilter] = useState("All");
@@ -65,13 +67,21 @@ const FarmersPage = () => {
   });
 
   const filtered = useMemo(() => records.filter((item) =>
-    [item.id, item.name, item.mobile, item.accountNumber, item.rationCard, areaForRecord(item).district, areaForRecord(item).tehsil, areaForRecord(item).block, areaForRecord(item).gramPanchayat, areaForRecord(item).village, item.governmentScheme, item.ownerType]
+    [item.id, item.name, item.mobile, item.accountNumber, item.rationCard, areaForRecord(item).district, areaForRecord(item).tehsil, areaForRecord(item).block, areaForRecord(item).gramPanchayat, item.governmentScheme, item.ownerType]
       .some((value) => value.toLowerCase().includes(search.toLowerCase()))
       && matchesAdministrativeFilter(item, areaFilter)
       && (loanFilter === "All" || item.loanStatus === loanFilter)
       && (insuranceFilter === "All" || item.insuranceStatus === insuranceFilter),
   ), [records, search, areaFilter, loanFilter, insuranceFilter]);
-  const adminOptions = useMemo(() => buildAdministrativeOptions(records), [records]);
+  const adminOptions = useMemo(() => buildAdministrativeOptions(locations), [locations]);
+  const totalAnimals = useMemo(() => records.reduce((sum, item) => sum + item.totalAnimals, 0), [records]);
+  const insuredCount = useMemo(() => records.filter((item) => item.insuranceStatus === "Insured").length, [records]);
+  const activeLoanCount = useMemo(() => records.filter((item) => item.loanStatus === "Active").length, [records]);
+
+  const locationSummary = (item: FarmerRecord) => {
+    const area = areaForRecord(item);
+    return [area.gramPanchayat, area.block, area.tehsil].filter(Boolean).join(" / ");
+  };
 
   const save = async () => {
     if (saveMutation.isPending) {
@@ -125,6 +135,7 @@ const FarmersPage = () => {
                       onChange={(area) => setForm((p) => ({ ...p, ...(area as AdministrativeArea) }))}
                       labelPrefix="Owner"
                       allowManualEntry={adminOptions.districts.length === 0}
+                      hideVillage
                       districtOptions={adminOptions.districts}
                       tehsilOptions={adminOptions.tehsils}
                       blockOptions={adminOptions.blocks}
@@ -144,90 +155,116 @@ const FarmersPage = () => {
           </Dialog>
         </PageHeader>
 
-        <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
           <StatCard label="Farmers" value={records.length} hint="Registered owners" icon={Users} />
-          <StatCard label="Insured" value={records.filter((f) => f.insuranceStatus === "Insured").length} hint="Covered livestock owners" icon={ShieldCheck} />
-          <StatCard label="Active Loans" value={records.filter((f) => f.loanStatus === "Active").length} hint="Credit support" icon={Landmark} tone="blue" />
-          <StatCard label="Animals" value={records.reduce((sum, item) => sum + item.totalAnimals, 0)} hint="Farmer declared" icon={Users} tone="amber" />
+          <StatCard label="Insured" value={insuredCount} hint="Covered livestock owners" icon={ShieldCheck} />
+          <StatCard label="Active Loans" value={activeLoanCount} hint="Credit support" icon={Landmark} tone="blue" />
+          <StatCard label="Animals" value={totalAnimals} hint="Farmer declared" icon={MapPinned} tone="amber" />
         </div>
 
-        <Card>
-          <CardContent className="p-4">
-            <div className="mb-4 grid grid-cols-1 gap-3">
-              <div className="relative max-w-md">
-                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                <Input className="pl-9" placeholder="Search farmers, block, panchayat, village, scheme..." value={search} onChange={(e) => setSearch(e.target.value)} />
+        <Card className="border-border/60 shadow-sm">
+          <CardContent className="space-y-6 p-4 md:p-6">
+            <div className="space-y-3">
+              <div>
+                <p className="text-sm font-semibold text-foreground">Search Farmers</p>
+                <p className="text-xs text-muted-foreground">Search by name, mobile, Aadhaar, account, ration card, scheme, or location.</p>
               </div>
-              <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
-                <div className="rounded-md border bg-muted/20 p-3">
-                  <Label className="mb-2 block text-xs font-medium">Loan Filter</Label>
-                  <Select value={loanFilter} onValueChange={setLoanFilter}>
-                    <SelectTrigger><SelectValue placeholder="All" /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="All">All</SelectItem>
-                      <SelectItem value="No Loan">No Loan</SelectItem>
-                      <SelectItem value="Applied">Applied</SelectItem>
-                      <SelectItem value="Active">Active</SelectItem>
-                      <SelectItem value="Closed">Closed</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="rounded-md border bg-muted/20 p-3">
-                  <Label className="mb-2 block text-xs font-medium">Insurance Filter</Label>
-                  <Select value={insuranceFilter} onValueChange={setInsuranceFilter}>
-                    <SelectTrigger><SelectValue placeholder="All" /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="All">All</SelectItem>
-                      <SelectItem value="Insured">Insured</SelectItem>
-                      <SelectItem value="Not Insured">Not Insured</SelectItem>
-                      <SelectItem value="Claim Filed">Claim Filed</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="rounded-md border bg-muted/20 p-3">
+              <div className="relative max-w-2xl">
+                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                <Input className="h-11 pl-9" placeholder="Search Farmer Name / Mobile / Aadhaar" value={search} onChange={(e) => setSearch(e.target.value)} />
+              </div>
+            </div>
+
+            <div className="grid gap-4 xl:grid-cols-2">
+              <Card className="border-border/60 bg-muted/20 shadow-sm">
+                <CardContent className="space-y-4 p-4">
+                  <div>
+                    <p className="text-sm font-semibold text-foreground">Location Filters</p>
+                    <p className="text-xs text-muted-foreground">Use the live Locations sheet for district hierarchy.</p>
+                  </div>
                   <AdminAreaSelect
                     value={areaFilter}
                     onChange={(area) => setAreaFilter(area as AdministrativeFilter)}
                     includeAll
+                    hideVillage
+                    className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4"
                     districtOptions={adminOptions.districts}
                     tehsilOptions={adminOptions.tehsils}
                     blockOptions={adminOptions.blocks}
                     gramPanchayatOptions={adminOptions.gramPanchayats}
                     villageOptions={adminOptions.villages}
                   />
-                </div>
-              </div>
+                </CardContent>
+              </Card>
+
+              <Card className="border-border/60 bg-muted/20 shadow-sm">
+                <CardContent className="space-y-4 p-4">
+                  <div>
+                    <p className="text-sm font-semibold text-foreground">Additional Filters</p>
+                    <p className="text-xs text-muted-foreground">Loan and insurance filters work together with location and search.</p>
+                  </div>
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                    <div className="space-y-2 rounded-2xl border border-border/60 bg-background p-3">
+                      <Label className="text-xs font-medium text-muted-foreground">Loan Status</Label>
+                      <Select value={loanFilter} onValueChange={setLoanFilter}>
+                        <SelectTrigger className="h-11"><SelectValue placeholder="All" /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="All">All</SelectItem>
+                          <SelectItem value="No Loan">No Loan</SelectItem>
+                          <SelectItem value="Applied">Applied</SelectItem>
+                          <SelectItem value="Active">Active</SelectItem>
+                          <SelectItem value="Closed">Closed</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-2 rounded-2xl border border-border/60 bg-background p-3">
+                      <Label className="text-xs font-medium text-muted-foreground">Insurance Status</Label>
+                      <Select value={insuranceFilter} onValueChange={setInsuranceFilter}>
+                        <SelectTrigger className="h-11"><SelectValue placeholder="All" /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="All">All</SelectItem>
+                          <SelectItem value="Insured">Insured</SelectItem>
+                          <SelectItem value="Not Insured">Not Insured</SelectItem>
+                          <SelectItem value="Claim Filed">Claim Filed</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
             </div>
-            <div className="overflow-x-auto">
+
+            <div className="hidden lg:block">
               <Table>
                 <TableHeader>
-                  <TableRow>
-                    <TableHead>Farmer</TableHead>
+                  <TableRow className="bg-muted/30 hover:bg-muted/30">
+                    <TableHead>Farmer Name</TableHead>
                     <TableHead>Mobile</TableHead>
-                    <TableHead>Aadhaar</TableHead>
-                    <TableHead>Account</TableHead>
-                    <TableHead>Ration Card</TableHead>
-                    <TableHead>Administrative Area</TableHead>
+                    <TableHead>Location</TableHead>
                     <TableHead>Animals</TableHead>
-                    <TableHead>Loan</TableHead>
-                    <TableHead>Insurance</TableHead>
-                    <TableHead>Scheme</TableHead>
-                    <TableHead>Action</TableHead>
+                    <TableHead>Insurance Status</TableHead>
+                    <TableHead>Loan Status</TableHead>
+                    <TableHead className="text-right">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {filtered.map((item) => (
-                    <TableRow key={item.id}>
-                      <TableCell><div className="font-medium">{item.name}</div><div className="text-xs text-muted-foreground">{item.id} · {item.ownerType}</div></TableCell>
-                      <TableCell>{item.mobile}</TableCell>
-                      <TableCell>{item.aadhaar}</TableCell>
-                      <TableCell>{item.accountNumber}</TableCell>
-                      <TableCell>{item.rationCard}</TableCell>
+                    <TableRow key={item.id} className="transition-colors hover:bg-muted/30">
                       <TableCell>
-                        <div>{areaForRecord(item).village}</div>
-                        <div className="text-xs text-muted-foreground">{areaForRecord(item).block} / {areaForRecord(item).gramPanchayat}</div>
+                        <div className="font-medium text-foreground">{item.name}</div>
+                        <div className="text-xs text-muted-foreground">{item.id} · {item.ownerType}</div>
+                      </TableCell>
+                      <TableCell>{item.mobile}</TableCell>
+                      <TableCell>
+                        <div className="font-medium">{areaForRecord(item).gramPanchayat || "-"}</div>
+                        <div className="text-xs text-muted-foreground">{locationSummary(item)}</div>
                       </TableCell>
                       <TableCell>{item.totalAnimals}</TableCell>
+                      <TableCell>
+                        <Badge variant={item.insuranceStatus === "Insured" ? "secondary" : "outline"} className={item.insuranceStatus === "Insured" ? "border-emerald-200 bg-emerald-50 text-emerald-700" : ""}>
+                          {item.insuranceStatus}
+                        </Badge>
+                      </TableCell>
                       <TableCell>
                         <Select value={item.loanStatus} onValueChange={async (v) => {
                           try {
@@ -246,47 +283,104 @@ const FarmersPage = () => {
                           </SelectContent>
                         </Select>
                       </TableCell>
-                      <TableCell>
-                        <Select value={item.insuranceStatus} onValueChange={async (v) => {
-                          try {
-                            await updateMutation.mutateAsync({ ...item, insuranceStatus: v as FarmerRecord["insuranceStatus"] });
-                            toast({ title: "Insurance status updated" });
-                          } catch (error) {
-                            toast({ title: "Update failed", description: error instanceof Error ? error.message : "Apps Script update error", variant: "destructive" });
-                          }
-                        }}>
-                          <SelectTrigger><SelectValue /></SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="Insured">Insured</SelectItem>
-                            <SelectItem value="Not Insured">Not Insured</SelectItem>
-                            <SelectItem value="Claim Filed">Claim Filed</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </TableCell>
-                      <TableCell>{item.governmentScheme}</TableCell>
-                      <TableCell className="space-x-2">
-                        <Button variant="ghost" size="sm" onClick={() => { window.location.href = `tel:${item.mobile.replaceAll(" ", "")}`; }}>
-                          <Phone className="mr-1 h-3.5 w-3.5" /> Call
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => {
-                            const url = buildWhatsAppUrl(item.mobile, `Hello ${item.name}, this is e-Pashu. Please review your livestock record and pending updates.`);
-                            if (!url) {
-                              toast({ title: "Invalid mobile number", description: "WhatsApp link could not be generated.", variant: "destructive" });
-                              return;
-                            }
-                            window.open(url, "_blank", "noopener,noreferrer");
-                          }}
-                        >
-                          WhatsApp
-                        </Button>
+                      <TableCell className="text-right">
+                        <div className="inline-flex flex-wrap items-center justify-end gap-2">
+                          <Button variant="outline" size="sm" onClick={() => { window.location.href = `tel:${item.mobile.replaceAll(" ", "")}`; }}>
+                            <Phone className="mr-1 h-3.5 w-3.5" /> Call
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => {
+                              const url = buildWhatsAppUrl(item.mobile, `Hello ${item.name}, this is e-Pashu. Please review your livestock record and pending updates.`);
+                              if (!url) {
+                                toast({ title: "Invalid mobile number", description: "WhatsApp link could not be generated.", variant: "destructive" });
+                                return;
+                              }
+                              window.open(url, "_blank", "noopener,noreferrer");
+                            }}
+                          >
+                            WhatsApp
+                          </Button>
+                        </div>
                       </TableCell>
                     </TableRow>
                   ))}
                 </TableBody>
               </Table>
+            </div>
+
+            <div className="grid gap-4 lg:hidden">
+              {filtered.map((item) => (
+                <Card key={item.id} className="border-border/60 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md">
+                  <CardContent className="space-y-4 p-4">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0 space-y-1">
+                        <p className="truncate text-base font-semibold text-foreground">{item.name}</p>
+                        <p className="text-sm text-muted-foreground">{item.mobile}</p>
+                      </div>
+                      <div className="text-right text-xs text-muted-foreground">{item.ownerType}</div>
+                    </div>
+
+                    <div className="grid gap-3 text-sm sm:grid-cols-2">
+                      <div>
+                        <p className="text-xs uppercase tracking-wide text-muted-foreground">Location</p>
+                        <p className="font-medium text-foreground">{item.gramPanchayat || "-"}</p>
+                        <p className="text-xs text-muted-foreground">{locationSummary(item)}</p>
+                      </div>
+                      <div>
+                        <p className="text-xs uppercase tracking-wide text-muted-foreground">Animals</p>
+                        <p className="font-medium text-foreground">{item.totalAnimals}</p>
+                      </div>
+                      <div>
+                        <p className="text-xs uppercase tracking-wide text-muted-foreground">Insurance Status</p>
+                        <Badge variant={item.insuranceStatus === "Insured" ? "secondary" : "outline"} className={item.insuranceStatus === "Insured" ? "border-emerald-200 bg-emerald-50 text-emerald-700" : ""}>
+                          {item.insuranceStatus}
+                        </Badge>
+                      </div>
+                      <div>
+                        <p className="text-xs uppercase tracking-wide text-muted-foreground">Loan Status</p>
+                        <Select value={item.loanStatus} onValueChange={async (v) => {
+                          try {
+                            await updateMutation.mutateAsync({ ...item, loanStatus: v as FarmerRecord["loanStatus"] });
+                            toast({ title: "Loan status updated" });
+                          } catch (error) {
+                            toast({ title: "Update failed", description: error instanceof Error ? error.message : "Apps Script update error", variant: "destructive" });
+                          }
+                        }}>
+                          <SelectTrigger className="h-10"><SelectValue /></SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="No Loan">No Loan</SelectItem>
+                            <SelectItem value="Applied">Applied</SelectItem>
+                            <SelectItem value="Active">Active</SelectItem>
+                            <SelectItem value="Closed">Closed</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </div>
+
+                    <div className="flex gap-2">
+                      <Button className="flex-1" variant="outline" onClick={() => { window.location.href = `tel:${item.mobile.replaceAll(" ", "")}`; }}>
+                        <Phone className="mr-1 h-3.5 w-3.5" /> Call
+                      </Button>
+                      <Button
+                        className="flex-1"
+                        variant="ghost"
+                        onClick={() => {
+                          const url = buildWhatsAppUrl(item.mobile, `Hello ${item.name}, this is e-Pashu. Please review your livestock record and pending updates.`);
+                          if (!url) {
+                            toast({ title: "Invalid mobile number", description: "WhatsApp link could not be generated.", variant: "destructive" });
+                            return;
+                          }
+                          window.open(url, "_blank", "noopener,noreferrer");
+                        }}
+                      >
+                        WhatsApp
+                      </Button>
+                    </div>
+                  </CardContent>
+                </Card>
+              ))}
             </div>
           </CardContent>
         </Card>

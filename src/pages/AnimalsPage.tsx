@@ -20,7 +20,8 @@ type AnimalStatus = "Healthy" | "Critical" | "Treatment" | "Dead" | "Sold";
 import { toast } from "@/components/ui/use-toast";
 import { AdminAreaSelect } from "@/components/AdminAreaSelect";
 import { allAdministrativeFilter, areaForRecord, buildAdministrativeOptions, defaultAdministrativeArea, matchesAdministrativeFilter, type AdministrativeArea, type AdministrativeFilter } from "@/lib/adminHierarchy";
-import { createLivestockAnimal, deleteLivestockAnimal, listLivestockAnimals } from "@/lib/dataService";
+import { createLivestockAnimal, deleteLivestockAnimal, listLivestockAnimals, listLocations } from "@/lib/dataService";
+import type { LocationRecord } from "@/lib/types";
 
 const species: Species[] = ["Cattle", "Buffalo", "Sheep", "Goat", "Pig", "Hen", "Duck"];
 const statuses: AnimalStatus[] = ["Healthy", "Critical", "Treatment", "Dead", "Sold"];
@@ -63,6 +64,7 @@ const emptyAnimal: LivestockAnimal = {
 const AnimalsPage = () => {
   const queryClient = useQueryClient();
   const { data: records = [] } = useQuery({ queryKey: ["livestockAnimals"], queryFn: listLivestockAnimals, initialData: [] as LivestockAnimal[] });
+  const { data: locations = [] } = useQuery({ queryKey: ["locations"], queryFn: listLocations, initialData: [] as LocationRecord[] });
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState("all");
   const [areaFilter, setAreaFilter] = useState<AdministrativeFilter>(allAdministrativeFilter);
@@ -94,12 +96,12 @@ const AnimalsPage = () => {
   const filtered = useMemo(() => records.filter((item) => {
     const query = search.toLowerCase();
     const area = areaForRecord(item);
-    const matchSearch = [item.id, item.earTag, item.ownerName, area.district, area.tehsil, area.block, area.gramPanchayat, area.village, item.species, item.breed]
+    const matchSearch = [item.id, item.earTag, item.ownerName, area.district, area.tehsil, area.block, area.gramPanchayat, item.species, item.breed]
       .some((value) => value.toLowerCase().includes(query));
     const matchFilter = filter === "all" || item.status === filter || item.species === filter;
     return matchSearch && matchFilter && matchesAdministrativeFilter(item, areaFilter);
   }), [records, search, filter, areaFilter]);
-  const adminOptions = useMemo(() => buildAdministrativeOptions(records), [records]);
+  const adminOptions = useMemo(() => buildAdministrativeOptions(locations), [locations]);
 
   const formatAge = (item: LivestockAnimal) => {
     const months = Number(item.ageMonths ?? (item.age !== undefined ? item.age * 12 : 0)) || 0;
@@ -217,6 +219,7 @@ const AnimalsPage = () => {
                     value={areaForRecord(form)}
                     onChange={(area) => setForm((p) => ({ ...p, ...(area as AdministrativeArea) }))}
                     allowManualEntry={adminOptions.districts.length === 0}
+                    hideVillage
                     districtOptions={adminOptions.districts}
                     tehsilOptions={adminOptions.tehsils}
                     blockOptions={adminOptions.blocks}
@@ -252,7 +255,7 @@ const AnimalsPage = () => {
             <div className="mb-4 flex flex-col gap-3 lg:flex-row">
               <div className="relative flex-1">
                 <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                <Input className="pl-9" placeholder="Search by ID, tag, owner, block, panchayat, village..." value={search} onChange={(e) => setSearch(e.target.value)} />
+                <Input className="pl-9" placeholder="Search by ID, tag, owner, block, panchayat..." value={search} onChange={(e) => setSearch(e.target.value)} />
               </div>
               <Select value={filter} onValueChange={setFilter}>
                 <SelectTrigger className="w-full lg:w-48"><SelectValue /></SelectTrigger>
@@ -268,6 +271,7 @@ const AnimalsPage = () => {
                 value={areaFilter}
                 onChange={(area) => setAreaFilter(area as AdministrativeFilter)}
                 includeAll
+                hideVillage
                 districtOptions={adminOptions.districts}
                 tehsilOptions={adminOptions.tehsils}
                 blockOptions={adminOptions.blocks}
@@ -301,8 +305,8 @@ const AnimalsPage = () => {
                       <TableCell>{item.species}<div className="text-xs text-muted-foreground">{item.breed}, {item.gender}</div></TableCell>
                       <TableCell>{item.ownerName}</TableCell>
                       <TableCell>
-                        <div>{areaForRecord(item).village}</div>
-                        <div className="text-xs text-muted-foreground">{areaForRecord(item).block} / {areaForRecord(item).gramPanchayat}</div>
+                        <div>{areaForRecord(item).gramPanchayat}</div>
+                        <div className="text-xs text-muted-foreground">{areaForRecord(item).district} / {areaForRecord(item).tehsil} / {areaForRecord(item).block}</div>
                       </TableCell>
                       <TableCell>
                         <Select value={["Done","Pending","Overdue"].includes(item.vaccinationStatus) ? item.vaccinationStatus : ""} onValueChange={async (v) => {

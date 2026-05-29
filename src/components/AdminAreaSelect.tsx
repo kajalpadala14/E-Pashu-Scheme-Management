@@ -21,7 +21,9 @@ interface AdminAreaSelectProps {
   labelPrefix?: string;
   includeAll?: boolean;
   allowManualEntry?: boolean;
+  hideVillage?: boolean;
   className?: string;
+  inlineLabels?: boolean;
   // optional overrides populated from sheet data
   districtOptions?: string[];
   tehsilOptions?: string[];
@@ -36,7 +38,9 @@ export function AdminAreaSelect({
   labelPrefix = "",
   includeAll = false,
   allowManualEntry = false,
+  hideVillage = false,
   className = "grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-5",
+  inlineLabels = false,
   districtOptions = [],
   tehsilOptions = [],
   blockOptions = [],
@@ -51,6 +55,10 @@ export function AdminAreaSelect({
   const blocks = blockOptions && blockOptions.length ? blockOptions : getBlocks(area.district, area.tehsil);
   const gramPanchayats = gramPanchayatOptions && gramPanchayatOptions.length ? gramPanchayatOptions : getGramPanchayats(area.district, area.tehsil, area.block);
   const villages = villageOptions && villageOptions.length ? villageOptions : getVillages(area.district, area.tehsil, area.block, area.gramPanchayat);
+  const resolveVillage = (district: string, tehsil: string, block: string, gramPanchayat: string) => {
+    const nextVillages = villageOptions && villageOptions.length ? villageOptions : getVillages(district, tehsil, block, gramPanchayat);
+    return nextVillages[0] || gramPanchayat || "";
+  };
 
   const setDistrict = (district: string) => {
     if (district === "all") {
@@ -60,7 +68,7 @@ export function AdminAreaSelect({
     const tehsil = getTehsils(district)[0] || "";
     const block = getBlocks(district, tehsil)[0] || "";
     const gramPanchayat = getGramPanchayats(district, tehsil, block)[0] || "";
-    const village = getVillages(district, tehsil, block, gramPanchayat)[0] || "";
+    const village = resolveVillage(district, tehsil, block, gramPanchayat);
     onChange({ district, tehsil, block, gramPanchayat, village });
   };
 
@@ -71,7 +79,7 @@ export function AdminAreaSelect({
     }
     const block = getBlocks(area.district, tehsil)[0] || "";
     const gramPanchayat = getGramPanchayats(area.district, tehsil, block)[0] || "";
-    const village = getVillages(area.district, tehsil, block, gramPanchayat)[0] || "";
+    const village = resolveVillage(area.district, tehsil, block, gramPanchayat);
     onChange({ district: area.district, tehsil, block, gramPanchayat, village });
   };
 
@@ -81,7 +89,7 @@ export function AdminAreaSelect({
       return;
     }
     const gramPanchayat = getGramPanchayats(area.district, area.tehsil, block)[0] || "";
-    const village = getVillages(area.district, area.tehsil, block, gramPanchayat)[0] || "";
+    const village = resolveVillage(area.district, area.tehsil, block, gramPanchayat);
     onChange({ ...area, block, gramPanchayat, village });
   };
 
@@ -90,7 +98,7 @@ export function AdminAreaSelect({
       onChange({ district: area.district, tehsil: value.tehsil, block: value.block, gramPanchayat: "all", village: "all" });
       return;
     }
-    const village = getVillages(area.district, area.tehsil, area.block, gramPanchayat)[0] || "";
+    const village = resolveVillage(area.district, area.tehsil, area.block, gramPanchayat);
     onChange({ ...area, gramPanchayat, village });
   };
 
@@ -98,22 +106,25 @@ export function AdminAreaSelect({
 
   return (
     <div className={className}>
-      <div>
-        <Label>{prefix}District</Label>
-        {shouldUseManualEntry ? (
-          <Input value={value.district} onChange={(event) => onChange({ ...value, district: event.target.value })} placeholder="Enter district" />
-        ) : (
-          <Select value={value.district} onValueChange={setDistrict}>
-            <SelectTrigger><SelectValue placeholder="Select District" /></SelectTrigger>
-            <SelectContent>
-              {includeAll && <SelectItem value="all">All Districts</SelectItem>}
-              {districtOptionsList.map((district) => <SelectItem key={district} value={district}>{district}</SelectItem>)}
-            </SelectContent>
-          </Select>
-        )}
+      <div className={inlineLabels ? "flex items-center gap-3" : undefined}>
+        <Label className={inlineLabels ? "w-36" : undefined}>{prefix}District</Label>
+        <div className={inlineLabels ? "flex-1" : undefined}>
+          {shouldUseManualEntry ? (
+            <Input value={value.district} onChange={(event) => onChange({ ...value, district: event.target.value })} placeholder="Enter district" />
+          ) : (
+            <Select value={value.district} onValueChange={setDistrict}>
+              <SelectTrigger><SelectValue placeholder="Select District" /></SelectTrigger>
+              <SelectContent>
+                {includeAll && <SelectItem value="all">All Districts</SelectItem>}
+                {districtOptionsList.map((district) => <SelectItem key={district} value={district}>{district}</SelectItem>)}
+              </SelectContent>
+            </Select>
+          )}
+        </div>
       </div>
-      <div>
-        <Label>{prefix}Tehsil</Label>
+      <div className={inlineLabels ? "flex items-center gap-3" : undefined}>
+        <Label className={inlineLabels ? "w-36" : undefined}>{prefix}Tehsil</Label>
+        <div className={inlineLabels ? "flex-1" : undefined}>
         {shouldUseManualEntry ? (
           <Input value={value.tehsil} onChange={(event) => onChange({ ...value, tehsil: event.target.value })} placeholder="Enter tehsil" />
         ) : (
@@ -125,9 +136,11 @@ export function AdminAreaSelect({
             </SelectContent>
           </Select>
         )}
+        </div>
       </div>
-      <div>
-        <Label>{prefix}Block</Label>
+      <div className={inlineLabels ? "flex items-center gap-3" : undefined}>
+        <Label className={inlineLabels ? "w-36" : undefined}>{prefix}Block</Label>
+        <div className={inlineLabels ? "flex-1" : undefined}>
         {shouldUseManualEntry ? (
           <Input value={value.block} onChange={(event) => onChange({ ...value, block: event.target.value })} placeholder="Enter block" />
         ) : (
@@ -139,9 +152,11 @@ export function AdminAreaSelect({
             </SelectContent>
           </Select>
         )}
+        </div>
       </div>
-      <div>
-        <Label>{prefix}Gram Panchayat</Label>
+      <div className={inlineLabels ? "flex items-center gap-3" : undefined}>
+        <Label className={inlineLabels ? "w-36" : undefined}>{prefix}Gram Panchayat</Label>
+        <div className={inlineLabels ? "flex-1" : undefined}>
         {shouldUseManualEntry ? (
           <Input value={value.gramPanchayat} onChange={(event) => onChange({ ...value, gramPanchayat: event.target.value })} placeholder="Enter gram panchayat" />
         ) : (
@@ -153,21 +168,26 @@ export function AdminAreaSelect({
             </SelectContent>
           </Select>
         )}
+        </div>
       </div>
-      <div>
-        <Label>{prefix}Village</Label>
-        {shouldUseManualEntry ? (
-          <Input value={value.village} onChange={(event) => onChange({ ...value, village: event.target.value })} placeholder="Enter village" />
-        ) : (
-          <Select value={value.village} onValueChange={(village) => onChange({ ...area, village })} disabled={isAll}>
-            <SelectTrigger><SelectValue placeholder="Select Village" /></SelectTrigger>
-            <SelectContent>
-              {includeAll && <SelectItem value="all">All Villages</SelectItem>}
-              {villages.map((village) => <SelectItem key={village} value={village}>{village}</SelectItem>)}
-            </SelectContent>
-          </Select>
-        )}
-      </div>
+      {!hideVillage && (
+        <div className={inlineLabels ? "flex items-center gap-3" : undefined}>
+          <Label className={inlineLabels ? "w-36" : undefined}>{prefix}Village</Label>
+          <div className={inlineLabels ? "flex-1" : undefined}>
+          {shouldUseManualEntry ? (
+            <Input value={value.village} onChange={(event) => onChange({ ...value, village: event.target.value })} placeholder="Enter village" />
+          ) : (
+            <Select value={value.village} onValueChange={(village) => onChange({ ...area, village })} disabled={isAll}>
+              <SelectTrigger><SelectValue placeholder="Select Village" /></SelectTrigger>
+              <SelectContent>
+                {includeAll && <SelectItem value="all">All Villages</SelectItem>}
+                {villages.map((village) => <SelectItem key={village} value={village}>{village}</SelectItem>)}
+              </SelectContent>
+            </Select>
+          )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

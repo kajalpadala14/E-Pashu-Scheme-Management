@@ -133,6 +133,16 @@ export interface VillageInsight {
   vaccinationCoverage: number;
 }
 
+export interface LocationRecord {
+  id: string;
+  district: string;
+  tehsil: string;
+  block: string;
+  gramPanchayat: string;
+  village: string;
+  status: string;
+}
+
 export interface ReminderItem {
   id: string;
   village: string;
@@ -236,7 +246,7 @@ export interface UserDirectoryRecord {
   id: string;
   name: string;
   email: string;
-  role: "admin" | "veterinary_doctor" | "field_officer" | "data_entry_operator";
+  role: "admin" | "veterinary_doctor" | "field_officer" | "departmental_officer" | "deputy_director_vet";
   region: string;
   active: boolean;
   createdAt: string;

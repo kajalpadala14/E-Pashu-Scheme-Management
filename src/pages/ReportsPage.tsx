@@ -17,21 +17,23 @@ import {
   listDailyFieldReports,
   listEmergencyReports,
   listFieldOfficerTasks,
+  listLocations,
   listPhotoEvidence,
   listPregnancyRecords,
   listVaccinationRecords,
   listSupervisorVerifications,
 } from "@/lib/dataService";
+import type { LocationRecord } from "@/lib/types";
 import { useUser } from "@/contexts/UserContext";
-import { matchesUserRegion } from "@/lib/rbac";
+import { hasFullAccessRole, matchesUserRegion } from "@/lib/rbac";
 import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
 
 const ReportsPage = () => {
   const { user } = useUser();
   const isFieldOfficer = user?.role === "field_officer";
-  const isAdmin = user?.role === "admin";
-  const isRegionalUser = user?.role === "veterinary_doctor";
+  const isAdmin = hasFullAccessRole(user?.role);
+  const isRegionalUser = !!user?.role && !hasFullAccessRole(user.role) && user.role === "veterinary_doctor";
   const [areaFilter, setAreaFilter] = useState<AdministrativeFilter>(allAdministrativeFilter);
   const { data: animals = [] } = useQuery({ queryKey: ["livestockAnimals"], queryFn: listLivestockAnimals, initialData: [] });
   const { data: farmers = [] } = useQuery({ queryKey: ["farmerRecords"], queryFn: listFarmerRecords, initialData: [] });
@@ -43,7 +45,8 @@ const ReportsPage = () => {
   const { data: pregnancyRecords = [] } = useQuery({ queryKey: ["pregnancyRecords"], queryFn: listPregnancyRecords, initialData: [] });
   const { data: vaccinations = [] } = useQuery({ queryKey: ["vaccinationRecords"], queryFn: listVaccinationRecords, initialData: [] });
   const { data: supervisorVerifications = [] } = useQuery({ queryKey: ["supervisorVerifications"], queryFn: listSupervisorVerifications, initialData: [] });
-  const adminOptions = useMemo(() => buildAdministrativeOptions([...animals, ...farmers, ...dailyFieldReports.flatMap((report) => report.villagesVisited.map((village) => ({ village }))) ]), [animals, farmers, dailyFieldReports]);
+  const { data: locations = [] } = useQuery({ queryKey: ["locations"], queryFn: listLocations, initialData: [] as LocationRecord[] });
+  const adminOptions = useMemo(() => buildAdministrativeOptions(locations), [locations]);
 
   const officerVillageSet = useMemo(() => {
     if (!isFieldOfficer || !user?.name) {
@@ -210,6 +213,7 @@ const ReportsPage = () => {
               value={areaFilter}
               onChange={(area) => setAreaFilter(area as AdministrativeFilter)}
               includeAll
+              hideVillage
               districtOptions={adminOptions.districts}
               tehsilOptions={adminOptions.tehsils}
               blockOptions={adminOptions.blocks}

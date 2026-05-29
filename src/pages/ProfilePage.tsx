@@ -13,7 +13,7 @@ import { toast } from "@/components/ui/use-toast";
 import { deleteUserByEmail, listUsers, upsertUser } from "@/lib/dataService";
 import type { UserDirectoryRecord } from "@/lib/types";
 import { useNavigate } from "react-router-dom";
-import { normalizeRole } from "@/lib/rbac";
+import { ROLE_OPTIONS, hasFullAccessRole, normalizeRole } from "@/lib/rbac";
 
 const blankUser: Omit<UserDirectoryRecord, "createdAt" | "updatedAt"> = {
   id: "",
@@ -29,7 +29,7 @@ const ProfilePage = () => {
   const navigate = useNavigate();
   const { user, setUser, logout } = useUser();
   const [form, setForm] = useState(blankUser);
-  const isAdmin = user?.role === "admin";
+  const hasAdminAccess = hasFullAccessRole(user?.role);
 
   const { data: users = [] } = useQuery({
     queryKey: ["users"],
@@ -51,7 +51,7 @@ const ProfilePage = () => {
     },
   });
 
-  const visibleUsers = useMemo(() => users.filter((item) => item.role !== "data_entry_operator"), [users]);
+  const visibleUsers = useMemo(() => users, [users]);
   const activeUsers = useMemo(() => visibleUsers.filter((item) => item.active), [visibleUsers]);
   const currentUserRoleLabel = user ? sessionRoleLabels[user.role] : "";
 
@@ -95,17 +95,19 @@ const ProfilePage = () => {
                 </div>
                 <div>
                   <Label>Email</Label>
-                  <Input value={user?.email || ""} onChange={(e) => user && setUser({ ...user, email: e.target.value })} disabled={!user || !isAdmin} />
+                  <Input value={user?.email || ""} onChange={(e) => user && setUser({ ...user, email: e.target.value })} disabled={!user || !hasAdminAccess} />
                 </div>
                 <div>
                   <Label>Role</Label>
-                  {isAdmin ? (
+                  {hasAdminAccess ? (
                     <Select value={user?.role || "admin"} onValueChange={(v) => user && setUser({ ...user, role: normalizeRole(v) as UserRole })} disabled={!user}>
                       <SelectTrigger><SelectValue /></SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="admin">Admin</SelectItem>
-                        <SelectItem value="veterinary_doctor">Veterinary Doctor</SelectItem>
-                        <SelectItem value="field_officer">Field Officer</SelectItem>
+                        {ROLE_OPTIONS.map((option) => (
+                          <SelectItem key={option.value} value={option.value}>
+                            {option.label}
+                          </SelectItem>
+                        ))}
                       </SelectContent>
                     </Select>
                   ) : (
@@ -141,7 +143,7 @@ const ProfilePage = () => {
             <CardTitle className="text-sm font-medium">Access Management</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
-            {isAdmin ? (
+            {hasAdminAccess ? (
               <>
                 <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
                   <div>
@@ -157,9 +159,11 @@ const ProfilePage = () => {
                     <Select value={form.role} onValueChange={(v) => setForm((prev) => ({ ...prev, role: normalizeRole(v) as UserRole }))}>
                       <SelectTrigger><SelectValue /></SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="admin">Admin</SelectItem>
-                        <SelectItem value="veterinary_doctor">Veterinary Doctor</SelectItem>
-                        <SelectItem value="field_officer">Field Officer</SelectItem>
+                        {ROLE_OPTIONS.map((option) => (
+                          <SelectItem key={option.value} value={option.value}>
+                            {option.label}
+                          </SelectItem>
+                        ))}
                       </SelectContent>
                     </Select>
                   </div>

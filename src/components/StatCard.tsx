@@ -24,16 +24,16 @@ export function StatCard({
   };
 
   return (
-    <Card className="overflow-hidden border-l-4 border-l-primary shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md">
-      <CardContent className="p-3">
-        <div className="flex items-start justify-between gap-3">
+    <Card className="h-full overflow-hidden border-l-4 border-l-primary shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md">
+      <CardContent className="flex h-full items-center p-4">
+        <div className="flex w-full items-start justify-between gap-4">
           <div className="min-w-0">
             <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{label}</p>
-            <p className="mt-1 text-xl font-bold leading-none">{value}</p>
-            <p className="mt-1 text-xs text-muted-foreground">{hint}</p>
+            <p className="mt-2 text-2xl font-bold leading-none tracking-tight">{value}</p>
+            <p className="mt-2 text-sm text-muted-foreground">{hint}</p>
           </div>
-          <div className={cn("flex h-10 w-10 shrink-0 items-center justify-center rounded-md", tones[tone])}>
-            <Icon className="h-5 w-5" />
+          <div className={cn("flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl transition-transform duration-200 group-hover:scale-105", tones[tone])}>
+            <Icon className="h-6 w-6" />
           </div>
         </div>
       </CardContent>

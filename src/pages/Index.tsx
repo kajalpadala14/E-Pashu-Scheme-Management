@@ -1,13 +1,16 @@
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { Check, ChevronsUpDown, AlertTriangle, BellRing, Bug as Cow, Landmark, MapPinned, Syringe, Users } from "lucide-react";
 import { DashboardLayout } from "@/components/DashboardLayout";
 import { PageHeader } from "@/components/PageHeader";
 import { StatCard } from "@/components/StatCard";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { AdminAreaSelect } from "@/components/AdminAreaSelect";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Label } from "@/components/ui/label";
 import { allAdministrativeFilter, areaForRecord, matchesAdministrativeFilter, type AdministrativeFilter } from "@/lib/adminHierarchy";
-import { AlertTriangle, BellRing, Bug as Cow, Landmark, MapPinned, ShieldCheck, Stethoscope, Syringe, Users } from "lucide-react";
 import {
   Bar,
   BarChart,
@@ -27,15 +30,12 @@ import {
   listAlerts,
   listFarmerRecords,
   listLivestockAnimals,
+  listLocations,
   listPregnancyRecords,
   listVaccinationRecords,
-  listFieldOfficerTasks,
-  toggleFieldOfficerTask,
-  listFieldOfficers,
 } from "@/lib/dataService";
-import FieldTasksCard from "@/components/FieldTasksCard";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { FEATURES } from "@/lib/features";
+import type { LocationRecord } from "@/lib/types";
 
 const colors = ["#15803d", "#0369a1", "#ca8a04", "#7c3aed", "#dc2626", "#0f766e", "#475569"];
 const knownSpecies = new Set(["Cattle", "Buffalo", "Sheep", "Goat", "Pig", "Hen", "Duck"]);
@@ -60,26 +60,113 @@ function isPregnantAnimal(item: { pregnancyStatus?: string }) {
   return status === "pregnant" || status === "due soon";
 }
 
+type LocationArea = {
+  district: string;
+  tehsil: string;
+  block: string;
+  gramPanchayat: string;
+  village: string;
+};
+
+function uniqueValues(values: string[]) {
+  return Array.from(new Set(values.filter(Boolean)));
+}
+
+function buildLocationOptions(records: Array<Partial<LocationArea> & { village?: string }>) {
+  const areas = records.map((record) => areaForRecord(record));
+
+  return {
+    districts: uniqueValues(areas.map((area) => area.district)),
+    getTehsils: (district: string) => uniqueValues(areas.filter((area) => area.district === district).map((area) => area.tehsil)),
+    getBlocks: (district: string, tehsil: string) => uniqueValues(areas.filter((area) => area.district === district && area.tehsil === tehsil).map((area) => area.block)),
+    getGramPanchayats: (district: string, tehsil: string, block: string) => uniqueValues(areas.filter((area) => area.district === district && area.tehsil === tehsil && area.block === block).map((area) => area.gramPanchayat)),
+    getVillages: (district: string, tehsil: string, block: string, gramPanchayat: string) => uniqueValues(areas.filter((area) => area.district === district && area.tehsil === tehsil && area.block === block && area.gramPanchayat === gramPanchayat).map((area) => area.village)),
+  };
+}
+
+function SearchableDropdown({
+  label,
+  value,
+  options,
+  onSelect,
+  disabled,
+}: {
+  label: string;
+  value: string;
+  options: string[];
+  onSelect: (value: string) => void;
+  disabled?: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  const selectedLabel = value === "all" ? "All" : value || "All";
+
+  return (
+    <div className="space-y-2">
+      <Label className="text-xs font-medium text-muted-foreground">{label}</Label>
+      <Popover open={open} onOpenChange={setOpen}>
+        <PopoverTrigger asChild>
+          <Button
+            variant="outline"
+            role="combobox"
+            aria-expanded={open}
+            disabled={disabled}
+            className="h-10 w-full justify-between bg-background text-left font-normal"
+          >
+            <span className="truncate">{selectedLabel}</span>
+            <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+          </Button>
+        </PopoverTrigger>
+        <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0" align="start">
+          <Command>
+            <CommandInput placeholder={`Search ${label.toLowerCase()}`} />
+            <CommandList>
+              <CommandEmpty>No options found.</CommandEmpty>
+              <CommandGroup>
+                <CommandItem
+                  value="all"
+                  onSelect={() => {
+                    onSelect("all");
+                    setOpen(false);
+                  }}
+                >
+                  <Check className={`mr-2 h-4 w-4 ${value === "all" ? "opacity-100" : "opacity-0"}`} />
+                  All
+                </CommandItem>
+                {options.map((option) => (
+                  <CommandItem
+                    key={option}
+                    value={option}
+                    onSelect={() => {
+                      onSelect(option);
+                      setOpen(false);
+                    }}
+                  >
+                    <Check className={`mr-2 h-4 w-4 ${value === option ? "opacity-100" : "opacity-0"}`} />
+                    {option}
+                  </CommandItem>
+                ))}
+              </CommandGroup>
+            </CommandList>
+          </Command>
+        </PopoverContent>
+      </Popover>
+    </div>
+  );
+}
+
 const Dashboard = () => {
   const [areaFilter, setAreaFilter] = useState<AdministrativeFilter>(allAdministrativeFilter);
   const { data: dashboardData } = useQuery({ queryKey: ["dashboard"], queryFn: getDashboardData, initialData: { vaccinationTrends: [], healthStatusData: [], monthlyActivity: [], activities: [] } });
   const { data: animals = [] } = useQuery({ queryKey: ["livestockAnimals"], queryFn: listLivestockAnimals, initialData: [] });
   const { data: farmers = [] } = useQuery({ queryKey: ["farmerRecords"], queryFn: listFarmerRecords, initialData: [] });
-  const { data: officers = [] } = useQuery({ queryKey: ["fieldOfficers"], queryFn: listFieldOfficers, initialData: [] });
-  const [selectedOfficerId, setSelectedOfficerId] = useState<string>("");
+  const { data: locations = [] } = useQuery({ queryKey: ["locations"], queryFn: listLocations, initialData: [] as LocationRecord[] });
   const { data: vaccinations = [] } = useQuery({ queryKey: ["vaccinationRecords"], queryFn: listVaccinationRecords, initialData: [] });
   const { data: pregnancyRecords = [] } = useQuery({ queryKey: ["pregnancyRecords"], queryFn: listPregnancyRecords, initialData: [] });
   const { data: alerts = [] } = useQuery({ queryKey: ["alerts"], queryFn: listAlerts, initialData: [] });
-  const { data: fieldTasks = [] } = useQuery({ queryKey: ["fieldTasks"], queryFn: listFieldOfficerTasks, initialData: [] });
 
-  const queryClient = useQueryClient();
-  const toggleTaskMutation = useMutation({
-    mutationFn: (id: number) => toggleFieldOfficerTask(id),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["fieldTasks"] });
-      queryClient.invalidateQueries({ queryKey: ["dashboard"] });
-    },
-  });
+  const locationOptions = useMemo(() => buildLocationOptions(locations), [locations]);
+  const hasLocationData = locationOptions.districts.length > 0;
+  const selectedArea = areaFilter.district === "all" ? null : areaFilter;
 
   const filteredAnimals = useMemo(() => animals.filter((item) => matchesAdministrativeFilter(item, areaFilter)), [animals, areaFilter]);
   const filteredFarmers = farmers.filter((item) => matchesAdministrativeFilter(item, areaFilter));
@@ -139,6 +226,54 @@ const Dashboard = () => {
     ...vaccinations.slice(-2).map((item) => ({ action: "Vaccination Updated", detail: `${item.vaccineName || "Vaccine"} for ${item.animalId} is ${item.status}`, time: item.dueDate || "Sheet row" })),
   ].slice(0, 6);
 
+  const speciesDistributionHasData = speciesDistribution.length > 0;
+  const vaccinationTrendsHasData = vaccinationTrends.length > 0;
+  const villageHealthRiskHasData = filteredVillageHealthRisk.length > 0;
+  const pregnancyTrackingHasData = filteredPregnancyRecords.length > 0 || filteredVillageHealthRisk.some((item) => item.pregnant > 0);
+
+  const setDistrict = (district: string) => {
+    if (district === "all") {
+      setAreaFilter(allAdministrativeFilter);
+      return;
+    }
+
+    const tehsil = locationOptions.getTehsils(district)[0] || "";
+    const block = locationOptions.getBlocks(district, tehsil)[0] || "";
+    const gramPanchayat = locationOptions.getGramPanchayats(district, tehsil, block)[0] || "";
+    const village = locationOptions.getVillages(district, tehsil, block, gramPanchayat)[0] || "";
+    setAreaFilter({ district, tehsil, block, gramPanchayat, village });
+  };
+
+  const setTehsil = (tehsil: string) => {
+    if (!selectedArea) {
+      return;
+    }
+
+    const block = locationOptions.getBlocks(selectedArea.district, tehsil)[0] || "";
+    const gramPanchayat = locationOptions.getGramPanchayats(selectedArea.district, tehsil, block)[0] || "";
+    const village = locationOptions.getVillages(selectedArea.district, tehsil, block, gramPanchayat)[0] || "";
+    setAreaFilter({ district: selectedArea.district, tehsil, block, gramPanchayat, village });
+  };
+
+  const setBlock = (block: string) => {
+    if (!selectedArea) {
+      return;
+    }
+
+    const gramPanchayat = locationOptions.getGramPanchayats(selectedArea.district, selectedArea.tehsil, block)[0] || "";
+    const village = locationOptions.getVillages(selectedArea.district, selectedArea.tehsil, block, gramPanchayat)[0] || "";
+    setAreaFilter({ ...selectedArea, block, gramPanchayat, village });
+  };
+
+  const setGramPanchayat = (gramPanchayat: string) => {
+    if (!selectedArea) {
+      return;
+    }
+
+    const village = locationOptions.getVillages(selectedArea.district, selectedArea.tehsil, selectedArea.block, gramPanchayat)[0] || gramPanchayat;
+    setAreaFilter({ ...selectedArea, gramPanchayat, village });
+  };
+
   return (
     <DashboardLayout>
       <div className="space-y-6">
@@ -150,55 +285,35 @@ const Dashboard = () => {
           <Badge className="h-8 bg-primary">{FEATURES.ENABLE_LIVE_MONITORING ? "Live Monitoring" : "Monitoring Disabled"}</Badge>
         </PageHeader>
 
-        <Card>
-          <CardHeader><CardTitle className="text-sm">Dashboard Filters</CardTitle></CardHeader>
-          <CardContent>
-            <AdminAreaSelect
-              value={areaFilter}
-              onChange={(area) => setAreaFilter(area as AdministrativeFilter)}
-              includeAll
-              districtOptions={[...new Set(animals.map((a) => a.district).filter(Boolean))]}
-              tehsilOptions={[...new Set(animals.map((a) => a.tehsil).filter(Boolean))]}
-              blockOptions={[...new Set(animals.map((a) => a.block).filter(Boolean))]}
-              gramPanchayatOptions={[...new Set(animals.map((a) => a.gramPanchayat).filter(Boolean))]}
-              villageOptions={[...new Set(animals.map((a) => a.village).filter(Boolean))]}
-            />
-          </CardContent>
-        </Card>
+        {hasLocationData ? (
+          <Card className="border-border/60 shadow-sm">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-sm font-semibold">Location Filters</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
+                <SearchableDropdown label="District" value={areaFilter.district} options={locationOptions.districts} onSelect={setDistrict} />
+                <SearchableDropdown label="Tehsil" value={selectedArea?.tehsil || "all"} options={selectedArea ? locationOptions.getTehsils(selectedArea.district) : []} onSelect={setTehsil} disabled={!selectedArea} />
+                <SearchableDropdown label="Block" value={selectedArea?.block || "all"} options={selectedArea ? locationOptions.getBlocks(selectedArea.district, selectedArea.tehsil) : []} onSelect={setBlock} disabled={!selectedArea} />
+                <SearchableDropdown label="Gram Panchayat" value={selectedArea?.gramPanchayat || "all"} options={selectedArea ? locationOptions.getGramPanchayats(selectedArea.district, selectedArea.tehsil, selectedArea.block) : []} onSelect={setGramPanchayat} disabled={!selectedArea} />
+              </div>
+            </CardContent>
+          </Card>
+        ) : null}
 
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4 2xl:grid-cols-8">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4 2xl:grid-cols-7">
           <StatCard label="Total Animals" value={filteredAnimals.length} hint="Registered livestock" icon={Cow} />
           <StatCard label="Total Farmers" value={filteredFarmers.length} hint="Scheme-linked owners" icon={Users} tone="blue" />
-          <StatCard label="Vaccinated" value={vaccinated} hint={`${coverage}% village coverage`} icon={Syringe} />
-          <StatCard label="Critical" value={critical} hint="Immediate attention" icon={AlertTriangle} tone="red" />
-          <StatCard label="Pregnant" value={pregnant} hint="Breeding watchlist" icon={ShieldCheck} tone="amber" />
+          <StatCard label="Vaccinations" value={vaccinated} hint={`${coverage}% village coverage`} icon={Syringe} />
+          <StatCard label="Critical Cases" value={critical} hint="Immediate attention" icon={AlertTriangle} tone="red" />
           <StatCard label="Coverage" value={`${coverage}%`} hint="Vaccination progress" icon={MapPinned} tone="blue" />
           <StatCard label="Active Loans" value={activeLoans} hint={`${insuredFarmers} insured owners`} icon={Landmark} tone="amber" />
-          <StatCard label="AI Alerts" value={highAlerts} hint="High priority alerts" icon={BellRing} tone="red" />
+          <StatCard label="Alerts" value={alerts.length} hint={`${highAlerts} high priority`} icon={BellRing} tone="red" />
         </div>
-        
-        <FieldTasksCard
-          tasks={selectedOfficerId ? fieldTasks.filter((t) => {
-            const officer = officers.find((o) => o.id === selectedOfficerId);
-            if (!officer) return true;
-            const villages = officer.assignedVillages || [];
-            return !villages.length || villages.includes(t.village);
-          }) : fieldTasks}
-          onToggle={(id) => toggleTaskMutation.mutate(id)}
-          controls={(
-            <div className="min-w-[220px]">
-              <label className="mb-1 block text-xs font-medium text-muted-foreground">Officer</label>
-              <select className="w-full rounded-md border bg-background px-3 py-2 text-sm" value={selectedOfficerId} onChange={(e) => setSelectedOfficerId(e.target.value)}>
-                <option value="">All Officers</option>
-                {officers.map((o) => (
-                  <option key={o.id} value={o.id}>{o.name}</option>
-                ))}
-              </select>
-            </div>
-          )}
-        />
+
         <div className="grid grid-cols-1 gap-4 xl:grid-cols-4">
-          <Card className="xl:col-span-1">
+          {speciesDistributionHasData ? (
+            <Card className="xl:col-span-1 border-border/60 shadow-sm">
             <CardHeader>
               <CardTitle className="text-sm">Species Distribution</CardTitle>
             </CardHeader>
@@ -223,8 +338,10 @@ const Dashboard = () => {
               </div>
             </CardContent>
           </Card>
+          ) : null}
 
-          <Card className="xl:col-span-1">
+          {vaccinationTrendsHasData ? (
+          <Card className="xl:col-span-1 border-border/60 shadow-sm">
             <CardHeader>
               <CardTitle className="text-sm">Vaccination Trends</CardTitle>
             </CardHeader>
@@ -239,8 +356,10 @@ const Dashboard = () => {
               </ResponsiveContainer>
             </CardContent>
           </Card>
+          ) : null}
 
-          <Card className="xl:col-span-1">
+          {villageHealthRiskHasData ? (
+          <Card className="xl:col-span-1 border-border/60 shadow-sm">
             <CardHeader>
               <CardTitle className="text-sm">Village Health Risk</CardTitle>
             </CardHeader>
@@ -256,8 +375,10 @@ const Dashboard = () => {
               </ResponsiveContainer>
             </CardContent>
           </Card>
+          ) : null}
 
-          <Card className="xl:col-span-1">
+          {pregnancyTrackingHasData ? (
+          <Card className="xl:col-span-1 border-border/60 shadow-sm">
             <CardHeader>
               <CardTitle className="text-sm">Pregnancy Tracking</CardTitle>
             </CardHeader>
@@ -272,6 +393,7 @@ const Dashboard = () => {
               </ResponsiveContainer>
             </CardContent>
           </Card>
+          ) : null}
         </div>
 
         <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
@@ -293,23 +415,6 @@ const Dashboard = () => {
             </CardContent>
           </Card>
 
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-sm">AI Disease Alerts</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              {alerts.slice(0, 4).map((item) => (
-                <div key={item.id} className="rounded-md border p-3">
-                  <div className="flex items-center justify-between gap-2">
-                    <Badge variant={item.priority === "High" ? "destructive" : "secondary"}>{item.priority}</Badge>
-                    <Stethoscope className="h-4 w-4 text-muted-foreground" />
-                  </div>
-                  <p className="mt-2 text-sm font-medium leading-5">{item.message}</p>
-                  <p className="mt-1 text-xs text-muted-foreground">{item.type} · {item.time}</p>
-                </div>
-              ))}
-            </CardContent>
-          </Card>
         </div>
       </div>
     </DashboardLayout>
