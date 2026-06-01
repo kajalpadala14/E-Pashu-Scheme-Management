@@ -32,6 +32,18 @@ const defaultUsers: Record<UserRole, SessionUser> = {
     region: "",
     email: "fo.rampur@epashu.gov",
   },
+  block_officer: {
+    name: "Block Scheme Officer",
+    role: "block_officer",
+    region: "Dantewada",
+    email: "block.dantewada@epashu.gov",
+  },
+  data_entry_operator: {
+    name: "Scheme Data Entry Operator",
+    role: "data_entry_operator",
+    region: "",
+    email: "scheme.data@epashu.gov",
+  },
   departmental_officer: {
     name: "Manoj Kumar",
     role: "departmental_officer",

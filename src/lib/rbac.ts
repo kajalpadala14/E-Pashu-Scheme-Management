@@ -1,8 +1,10 @@
-export type UserRole = "admin" | "veterinary_doctor" | "field_officer" | "departmental_officer" | "deputy_director_vet";
+export type UserRole = "admin" | "veterinary_doctor" | "field_officer" | "block_officer" | "data_entry_operator" | "departmental_officer" | "deputy_director_vet";
 
 export const ROLE_OPTIONS = [
   { value: "admin", label: "Admin" },
   { value: "field_officer", label: "Field Officer" },
+  { value: "block_officer", label: "Block Officer" },
+  { value: "data_entry_operator", label: "Data Entry Operator" },
   { value: "veterinary_doctor", label: "Veterinary Doctor" },
   { value: "departmental_officer", label: "Departmental Officer" },
   { value: "deputy_director_vet", label: "Deputy Director (Vet)" },
@@ -37,8 +39,8 @@ const routePermissions: Record<AppRouteKey, UserRole[]> = {
   employees: ["departmental_officer"],
   ai_insights: [],
   reports: ["field_officer"],
-  schemes: ["field_officer"],
-  profile: ["field_officer"],
+  schemes: ["field_officer", "block_officer", "data_entry_operator"],
+  profile: ["field_officer", "block_officer", "data_entry_operator"],
 };
 
 const legacyRoleMap: Record<string, UserRole> = {
@@ -48,8 +50,11 @@ const legacyRoleMap: Record<string, UserRole> = {
   "veterinary doctor": "veterinary_doctor",
   field_officer: "field_officer",
   "field officer": "field_officer",
-  data_entry: "field_officer",
-  data_entry_operator: "field_officer",
+  block_officer: "block_officer",
+  "block officer": "block_officer",
+  data_entry: "data_entry_operator",
+  data_entry_operator: "data_entry_operator",
+  "data entry operator": "data_entry_operator",
   departmental_officer: "departmental_officer",
   "departmental officer": "departmental_officer",
   deputy_director_vet: "deputy_director_vet",
@@ -88,6 +93,9 @@ export function getDefaultRouteForRole(role: UserRole): string {
   if (hasRouteAccess(role, "reports")) {
     return "/reports";
   }
+  if (hasRouteAccess(role, "schemes")) {
+    return "/schemes";
+  }
   return "/profile";
 }
 
@@ -101,7 +109,7 @@ export function matchesUserRegion(
   }
 
   const regionTokens = normalizedRegion
-    .split(/[\/,>|-]+/)
+    .split(/[/,>|-]+/)
     .map((token) => token.trim())
     .filter(Boolean);
 
@@ -125,6 +133,8 @@ export const SAMPLE_ROLE_MAPPING = {
   admin: ["Full access", "User management", "Data governance"],
   veterinary_doctor: ["Full access", "User management", "Reports"],
   field_officer: ["Field module", "Emergency reports", "Own reports/evidence"],
+  block_officer: ["Scheme data", "Own block scheme updates", "Reports overview"],
+  data_entry_operator: ["Scheme data entry", "Scheme bulk upload", "Reports overview"],
   departmental_officer: ["User management", "Reports overview"],
   deputy_director_vet: ["Full access", "User approvals"],
 } as const;

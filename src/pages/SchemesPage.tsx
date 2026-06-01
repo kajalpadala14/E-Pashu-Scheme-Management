@@ -1,468 +1,482 @@
 import { useMemo, useState } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import * as XLSX from "xlsx";
 import { DashboardLayout } from "@/components/DashboardLayout";
+import { SchemeBeneficiaryManagement } from "@/components/SchemeBeneficiaryManagement";
 import { PageHeader } from "@/components/PageHeader";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { StatCard } from "@/components/StatCard";
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Progress } from "@/components/ui/progress";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Badge } from "@/components/ui/badge";
-import { ToastAction } from "@/components/ui/toast";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Textarea } from "@/components/ui/textarea";
 import { toast } from "@/components/ui/use-toast";
-import { Download, FileText, FileUpload, ShieldCheck, ShoppingBag, UserPlus } from "lucide-react";
+import { useUser } from "@/contexts/UserContext";
+import {
+  bulkUpsertSchemeDataRecords,
+  createSchemeDataRecord,
+  deleteSchemeDataRecord,
+  listSchemeDataRecords,
+  listSchemeBeneficiaryRecords,
+  updateSchemeDataRecord,
+} from "@/lib/dataService";
+import type { SchemeBeneficiaryRecord, SchemeDataRecord } from "@/lib/types";
+import { Bar, BarChart, CartesianGrid, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import { CheckCircle2, Clock3, Download, Eye, FileSpreadsheet, IndianRupee, Pencil, Plus, Search, Settings2, Target, Trash2, Upload, Users } from "lucide-react";
+import { jsPDF } from "jspdf";
+import autoTable from "jspdf-autotable";
 
-type SchemeStatus = "Pending" | "Approved" | "Rejected";
+type SchemeForm = Omit<SchemeDataRecord, "id" | "createdAt" | "updatedAt" | "createdBy">;
+type UploadSummary = { success: number; errors: string[] } | null;
 
-type SchemeBeneficiary = {
-  id: string;
-  institution: string;
-  scheme: string;
-  name: string;
-  mobile: string;
-  aadhaar: string;
-  village: string;
-  category: "SC" | "ST" | "OBC" | "GEN";
-  gender: "Male" | "Female" | "Other";
-  animalType: string;
-  quantity: number;
-  breed: string;
-  totalCost: number;
-  subsidyAmount: number;
-  beneficiaryContribution: number;
-  officerName: string;
-  inspectionDate: string;
-  status: SchemeStatus;
-  aadhaarFileName: string;
-  photoFileName: string;
-  passbookFileName: string;
-};
-
-type RecentBeneficiaryRow = {
-  id: number;
-  institution: string;
-  backyardPoultry: number;
-  piggeryUnit: number;
-  maleGoatDistribution: number;
-  bullDistribution: number;
-  femaleCalfRearing: number;
-  poultryPromotionScheme: number;
-};
-
-const schemeOptions = [
-  "Goat Scheme",
-  "Pig Scheme",
-  "Poultry Scheme",
-  "Bull Distribution",
-  "Female Calf Scheme",
+const schemeNames = [
+  "Bakra Distribution",
+  "Sukar Unit Distribution",
+  "Kukkut Unit Distribution",
+  "Sand Distribution",
+  "Nar Bakra Distribution",
+  "Unnat Mada Vats Palan",
+  "Chhattisgarh Kukkut Protsahan Yojana",
 ];
-const animalOptions = ["Goat", "Pig", "Poultry", "Bull", "Female Calf"];
-const categoryOptions: SchemeBeneficiary["category"][] = ["SC", "ST", "OBC", "GEN"];
-const genderOptions: SchemeBeneficiary["gender"][] = ["Male", "Female", "Other"];
-const statusOptions: SchemeStatus[] = ["Pending", "Approved", "Rejected"];
-const statusFilterOptions: Array<"All" | SchemeStatus> = ["All", "Pending", "Approved", "Rejected"];
+const financialYears = ["2025-26", "2024-25", "2023-24"];
+const templateHeaders = ["Financial Year", "Scheme Name", "Block", "Village", "Target", "Approved Cases", "Distributed Units", "Pending Cases", "Financial Progress Amount", "Physical Progress Percentage", "Remarks"];
 
-const initialBeneficiary: SchemeBeneficiary = {
-  id: "",
-  institution: "",
-  scheme: schemeOptions[0],
-  name: "",
-  mobile: "",
-  aadhaar: "",
+const emptyForm: SchemeForm = {
+  financialYear: financialYears[0],
+  schemeName: schemeNames[0],
+  block: "",
   village: "",
-  category: "GEN",
-  gender: "Male",
-  animalType: animalOptions[0],
-  quantity: 1,
-  breed: "",
-  totalCost: 0,
-  subsidyAmount: 0,
-  beneficiaryContribution: 0,
-  officerName: "",
-  inspectionDate: "",
-  status: "Pending",
-  aadhaarFileName: "",
-  photoFileName: "",
-  passbookFileName: "",
+  target: 0,
+  approvedCases: 0,
+  distributedUnits: 0,
+  pendingCases: 0,
+  financialProgressAmount: 0,
+  physicalProgressPercentage: 0,
+  remarks: "",
 };
-
-const sampleBeneficiaries: SchemeBeneficiary[] = [
-  {
-    id: "BEN-001",
-    institution: "पशु चिकित्सालय दन्तेवाड़ा",
-    scheme: "Goat Scheme",
-    name: "Radha Bai",
-    mobile: "9876543210",
-    aadhaar: "1234-5678-9012",
-    village: "Chitrakonda",
-    category: "OBC",
-    gender: "Female",
-    animalType: "Goat",
-    quantity: 4,
-    breed: "Local",
-    totalCost: 56000,
-    subsidyAmount: 42000,
-    beneficiaryContribution: 14000,
-    officerName: "Suresh Kumar",
-    inspectionDate: "2026-05-15",
-    status: "Approved",
-    aadhaarFileName: "radha-aadhaar.pdf",
-    photoFileName: "radha-photo.jpg",
-    passbookFileName: "radha-passbook.pdf",
-  },
-  {
-    id: "BEN-002",
-    institution: "कृपकेन्द्र बचेली",
-    scheme: "Poultry Scheme",
-    name: "Ravi Nayak",
-    mobile: "9123456780",
-    aadhaar: "2345-6789-0123",
-    village: "Bandagaon",
-    category: "SC",
-    gender: "Male",
-    animalType: "Poultry",
-    quantity: 20,
-    breed: "Layer",
-    totalCost: 42000,
-    subsidyAmount: 31500,
-    beneficiaryContribution: 10500,
-    officerName: "Meena Devi",
-    inspectionDate: "2026-05-18",
-    status: "Pending",
-    aadhaarFileName: "ravi-aadhaar.pdf",
-    photoFileName: "ravi-photo.jpg",
-    passbookFileName: "ravi-passbook.pdf",
-  },
-];
-
-const recentBeneficiaries: RecentBeneficiaryRow[] = [
-  { id: 1, institution: "पशु चिकित्सालय दन्तेवाड़ा", backyardPoultry: 80, piggeryUnit: 4, maleGoatDistribution: 4, bullDistribution: 2, femaleCalfRearing: 4, poultryPromotionScheme: 1 },
-  { id: 2, institution: "कृपकेन्द्र बचेली", backyardPoultry: 70, piggeryUnit: 2, maleGoatDistribution: 4, bullDistribution: 0, femaleCalfRearing: 5, poultryPromotionScheme: 0 },
-  { id: 3, institution: "पशु चिकित्सालय गीदम", backyardPoultry: 95, piggeryUnit: 6, maleGoatDistribution: 4, bullDistribution: 2, femaleCalfRearing: 3, poultryPromotionScheme: 2 },
-  { id: 4, institution: "पशु चिकित्सालय बारसूर", backyardPoultry: 85, piggeryUnit: 2, maleGoatDistribution: 4, bullDistribution: 0, femaleCalfRearing: 3, poultryPromotionScheme: 0 },
-  { id: 5, institution: "पशु चिकित्सालय बड़ेगुडुमार", backyardPoultry: 70, piggeryUnit: 2, maleGoatDistribution: 2, bullDistribution: 0, femaleCalfRearing: 2, poultryPromotionScheme: 0 },
-];
 
 const SchemesPage = () => {
-  const [beneficiaries, setBeneficiaries] = useState<SchemeBeneficiary[]>(sampleBeneficiaries);
-  const [open, setOpen] = useState(false);
-  const [form, setForm] = useState<SchemeBeneficiary>({ ...initialBeneficiary });
-  const [statusFilter, setStatusFilter] = useState<"All" | SchemeStatus>("Pending");
+  const queryClient = useQueryClient();
+  const { user } = useUser();
+  const [activeTab, setActiveTab] = useState("scheme-management");
+  const [financialYear, setFinancialYear] = useState("All Financial Years");
+  const [scheme, setScheme] = useState("All Schemes");
+  const [block, setBlock] = useState("All Blocks");
+  const [village, setVillage] = useState("All Villages");
+  const [search, setSearch] = useState("");
+  const [manageOpen, setManageOpen] = useState(false);
+  const [formOpen, setFormOpen] = useState(false);
+  const [viewRecord, setViewRecord] = useState<SchemeDataRecord | null>(null);
+  const [editingRecord, setEditingRecord] = useState<SchemeDataRecord | null>(null);
+  const [form, setForm] = useState<SchemeForm>({ ...emptyForm });
+  const [uploadSummary, setUploadSummary] = useState<UploadSummary>(null);
 
-  const filteredBeneficiaries = useMemo(
-    () => (statusFilter === "All" ? beneficiaries : beneficiaries.filter((item) => item.status === statusFilter)),
-    [beneficiaries, statusFilter],
-  );
+  const { data: records = [], error, isLoading } = useQuery({
+    queryKey: ["schemeDataRecords"],
+    queryFn: listSchemeDataRecords,
+    initialData: [] as SchemeDataRecord[],
+  });
+  const { data: beneficiaryRecords = [], isLoading: beneficiariesLoading } = useQuery({
+    queryKey: ["schemeBeneficiaryRecords"],
+    queryFn: listSchemeBeneficiaryRecords,
+    initialData: [] as SchemeBeneficiaryRecord[],
+  });
 
-  const totalTarget = useMemo(() => beneficiaries.length * 12 + 20, [beneficiaries]);
-  const completed = useMemo(() => beneficiaries.filter((item) => item.status === "Approved").length, [beneficiaries]);
-  const pending = useMemo(() => beneficiaries.filter((item) => item.status === "Pending").length, [beneficiaries]);
-  const schemeCounts = useMemo(
-    () => schemeOptions.map((scheme) => ({ scheme, count: beneficiaries.filter((item) => item.scheme === scheme).length })),
-    [beneficiaries],
-  );
+  const canAdd = user?.role === "admin" || user?.role === "data_entry_operator" || user?.role === "block_officer" || user?.role === "field_officer";
+  const canDelete = user?.role === "admin";
+  const canEdit = (record: SchemeDataRecord) => {
+    if (user?.role === "admin" || user?.role === "data_entry_operator") return true;
+    if (user?.role !== "block_officer" && user?.role !== "field_officer") return false;
+    return matchesBlock(user.region, record.block);
+  };
 
-  const saveBeneficiary = () => {
-    if (!form.institution || !form.name || !form.mobile || !form.aadhaar || !form.village) {
-      toast({ title: "Complete all beneficiary details", variant: "destructive" });
+  const options = useMemo(() => ({
+    years: unique(records.map((item) => item.financialYear)),
+    blocks: unique(records.map((item) => item.block)),
+    villages: unique(records.filter((item) => block === "All Blocks" || item.block === block).map((item) => item.village)),
+  }), [block, records]);
+
+  const filteredRecords = useMemo(() => records.filter((item) => (
+    (financialYear === "All Financial Years" || item.financialYear === financialYear)
+    && (scheme === "All Schemes" || item.schemeName === scheme)
+    && (block === "All Blocks" || item.block === block)
+    && (village === "All Villages" || item.village === village)
+    && item.schemeName.toLowerCase().includes(search.trim().toLowerCase())
+  )), [block, financialYear, records, scheme, search, village]);
+
+  const filteredBeneficiaries = useMemo(() => beneficiaryRecords.filter((item) => (
+    (financialYear === "All Financial Years" || isDateInFinancialYear(item.dateOfApproval || item.dateOfDistribution, financialYear))
+    && (scheme === "All Schemes" || item.schemeName === scheme)
+    && (block === "All Blocks" || item.block === block)
+    && (village === "All Villages" || item.village === village)
+  )), [beneficiaryRecords, block, financialYear, scheme, village]);
+
+  const dashboardRecords = useMemo(() => filteredRecords.map((record) => {
+    const linked = filteredBeneficiaries.filter((item) => item.schemeName === record.schemeName && item.block === record.block && item.village === record.village);
+    const approvedCases = linked.filter((item) => !!item.dateOfApproval).length;
+    const distributedUnits = sumBeneficiaryUnits(linked);
+    return {
+      ...record,
+      approvedCases,
+      distributedUnits,
+      pendingCases: Math.max(record.target - approvedCases, 0),
+      physicalProgressPercentage: record.target ? Math.round((distributedUnits / record.target) * 100) : 0,
+    };
+  }), [filteredBeneficiaries, filteredRecords]);
+
+  const chartRows = useMemo(() => schemeNames.map((name) => {
+    const schemeRecords = dashboardRecords.filter((item) => item.schemeName === name);
+    const schemeBeneficiaries = filteredBeneficiaries.filter((item) => item.schemeName === name);
+    const target = sum(schemeRecords, "target");
+    const achievement = sumBeneficiaryUnits(schemeBeneficiaries);
+    return {
+      name,
+      shortName: shortenScheme(name),
+      target,
+      achievement,
+      progress: target ? Math.round((achievement / target) * 100) : 0,
+    };
+  }).filter((item) => item.target || item.achievement), [dashboardRecords, filteredBeneficiaries]);
+
+  const totals = useMemo(() => {
+    const target = sum(dashboardRecords, "target");
+    const achievement = sumBeneficiaryUnits(filteredBeneficiaries);
+    return {
+    target,
+    achievement,
+    pending: Math.max(target - achievement, 0),
+    financial: sum(dashboardRecords, "financialProgressAmount"),
+  };
+  }, [dashboardRecords, filteredBeneficiaries]);
+
+  const saveMutation = useMutation({
+    mutationFn: (input: SchemeForm | SchemeDataRecord) => editingRecord
+      ? updateSchemeDataRecord(input as SchemeDataRecord)
+      : createSchemeDataRecord(input as SchemeForm),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ["schemeDataRecords"] });
+      setFormOpen(false);
+      setEditingRecord(null);
+      setForm({ ...emptyForm });
+      toast({ title: "Scheme record saved", description: "Dashboard analytics have been refreshed." });
+    },
+    onError: (mutationError) => toast({ title: "Unable to save record", description: getErrorMessage(mutationError), variant: "destructive" }),
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: deleteSchemeDataRecord,
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ["schemeDataRecords"] });
+      toast({ title: "Scheme record deleted" });
+    },
+    onError: (mutationError) => toast({ title: "Unable to delete record", description: getErrorMessage(mutationError), variant: "destructive" }),
+  });
+
+  const bulkMutation = useMutation({
+    mutationFn: bulkUpsertSchemeDataRecords,
+    onSuccess: async (result) => {
+      await queryClient.invalidateQueries({ queryKey: ["schemeDataRecords"] });
+      setUploadSummary({ success: result.saved, errors: [] });
+      toast({ title: "Excel upload complete", description: `${result.saved} scheme records saved.` });
+    },
+    onError: (mutationError) => setUploadSummary({ success: 0, errors: [getErrorMessage(mutationError)] }),
+  });
+
+  const submitForm = async () => {
+    const formError = validateSchemeRecord(form);
+    if (formError) {
+      toast({ title: "Check scheme record", description: formError, variant: "destructive" });
+      return;
+    }
+    await saveMutation.mutateAsync(editingRecord ? { ...editingRecord, ...form } : form);
+  };
+
+  const startAdd = () => {
+    setEditingRecord(null);
+    setForm({ ...emptyForm, block: user?.role === "block_officer" || user?.role === "field_officer" ? user.region : "" });
+    setFormOpen(true);
+  };
+
+  const startEdit = (record: SchemeDataRecord) => {
+    setEditingRecord(record);
+    setForm({
+      financialYear: record.financialYear,
+      schemeName: record.schemeName,
+      block: record.block,
+      village: record.village,
+      target: record.target,
+      approvedCases: record.approvedCases,
+      distributedUnits: record.distributedUnits,
+      pendingCases: record.pendingCases,
+      financialProgressAmount: record.financialProgressAmount,
+      physicalProgressPercentage: record.physicalProgressPercentage,
+      remarks: record.remarks,
+    });
+    setFormOpen(true);
+  };
+
+  const handleUpload = async (file: File) => {
+    setUploadSummary(null);
+    if (!file.name.toLowerCase().endsWith(".xlsx")) {
+      setUploadSummary({ success: 0, errors: ["Upload an Excel .xlsx file."] });
       return;
     }
 
-    setBeneficiaries((current) => [
-      ...current,
-      { ...form, id: `BEN-${String(current.length + 1).padStart(3, "0")}` },
-    ]);
-    setOpen(false);
-    setForm({ ...initialBeneficiary });
-    toast({ title: "Beneficiary added", description: "New scheme beneficiary has been saved." });
+    try {
+      const workbook = XLSX.read(await file.arrayBuffer(), { type: "array" });
+      const worksheet = workbook.Sheets[workbook.SheetNames[0]];
+      const rawRows = XLSX.utils.sheet_to_json<Record<string, unknown>>(worksheet, { defval: "" });
+      const parsed = rawRows.map(toSchemeRecord);
+      const errors = parsed.flatMap((item, index) => {
+        const rowError = validateSchemeRecord(item);
+        if (rowError) return [`Row ${index + 2}: ${rowError}`];
+        if ((user?.role === "block_officer" || user?.role === "field_officer") && !matchesBlock(user.region, item.block)) {
+          return [`Row ${index + 2}: block officers can only upload records for their assigned block.`];
+        }
+        return [];
+      });
+
+      if (!parsed.length) errors.push("The workbook does not contain any data rows.");
+      if (errors.length) {
+        setUploadSummary({ success: 0, errors });
+        return;
+      }
+      await bulkMutation.mutateAsync(parsed);
+    } catch (uploadError) {
+      setUploadSummary({ success: 0, errors: [getErrorMessage(uploadError)] });
+    }
+  };
+
+  const downloadTemplate = () => {
+    const worksheet = XLSX.utils.aoa_to_sheet([templateHeaders, [financialYears[0], schemeNames[0], "Dantewada", "Example Village", 100, 80, 70, 20, 250000, 70, "Replace this example row"]]);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, "Scheme Data");
+    XLSX.writeFile(workbook, "livestock-scheme-data-template.xlsx");
+  };
+
+  const exportExcel = () => {
+    const worksheet = XLSX.utils.json_to_sheet(dashboardRecords.map(toExportRow));
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, "Scheme Data");
+    XLSX.writeFile(workbook, "livestock-scheme-monitoring.xlsx");
+  };
+
+  const exportPdf = () => {
+    const doc = new jsPDF({ orientation: "landscape" });
+    doc.text("Livestock Scheme Monitoring Report", 14, 14);
+    autoTable(doc, {
+      startY: 20,
+      head: [["Scheme", "Block", "Village", "Target", "Approved", "Distributed", "Pending", "Financial Amount", "Physical %"]],
+      body: dashboardRecords.map((item) => [item.schemeName, item.block, item.village, item.target, item.approvedCases, item.distributedUnits, item.pendingCases, formatCurrency(item.financialProgressAmount), `${item.physicalProgressPercentage}%`]),
+      headStyles: { fillColor: [21, 128, 61] },
+    });
+    doc.save("livestock-scheme-monitoring.pdf");
   };
 
   return (
     <DashboardLayout>
       <div className="space-y-6">
-        <PageHeader title="Scheme Management" description="Manage scheme beneficiaries, subsidy verification and export-ready reports.">
-          <Dialog open={open} onOpenChange={setOpen}>
-            <DialogTrigger asChild>
-              <Button variant="secondary"><UserPlus className="mr-2 h-4 w-4" /> Add Beneficiary</Button>
-            </DialogTrigger>
-            <DialogContent className="max-h-[90vh] max-w-4xl overflow-y-auto">
-              <DialogHeader>
-                <DialogTitle>Add Scheme Beneficiary</DialogTitle>
-              </DialogHeader>
-              <div className="grid gap-4 md:grid-cols-3">
-                <div>
-                  <Label>Scheme</Label>
-                  <Select value={form.scheme} onValueChange={(value) => setForm((prev) => ({ ...prev, scheme: value }))}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
-                    <SelectContent>{schemeOptions.map((option) => <SelectItem key={option} value={option}>{option}</SelectItem>)}</SelectContent>
-                  </Select>
-                </div>
-                <div>
-                  <Label>Institution Name</Label>
-                  <Input value={form.institution} onChange={(event) => setForm((prev) => ({ ...prev, institution: event.target.value }))} />
-                </div>
-                <div>
-                  <Label>Beneficiary Name</Label>
-                  <Input value={form.name} onChange={(event) => setForm((prev) => ({ ...prev, name: event.target.value }))} />
-                </div>
-                <div>
-                  <Label>Mobile Number</Label>
-                  <Input inputMode="numeric" maxLength={10} value={form.mobile} onChange={(event) => setForm((prev) => ({ ...prev, mobile: event.target.value }))} />
-                </div>
-                <div>
-                  <Label>Aadhaar Number</Label>
-                  <Input value={form.aadhaar} onChange={(event) => setForm((prev) => ({ ...prev, aadhaar: event.target.value }))} />
-                </div>
-                <div>
-                  <Label>Village</Label>
-                  <Input value={form.village} onChange={(event) => setForm((prev) => ({ ...prev, village: event.target.value }))} />
-                </div>
-                <div>
-                  <Label>Category</Label>
-                  <Select value={form.category} onValueChange={(value) => setForm((prev) => ({ ...prev, category: value as SchemeBeneficiary["category"] }))}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
-                    <SelectContent>{categoryOptions.map((option) => <SelectItem key={option} value={option}>{option}</SelectItem>)}</SelectContent>
-                  </Select>
-                </div>
-                <div>
-                  <Label>Gender</Label>
-                  <Select value={form.gender} onValueChange={(value) => setForm((prev) => ({ ...prev, gender: value as SchemeBeneficiary["gender"] }))}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
-                    <SelectContent>{genderOptions.map((option) => <SelectItem key={option} value={option}>{option}</SelectItem>)}</SelectContent>
-                  </Select>
-                </div>
-                <div>
-                  <Label>Animal Type</Label>
-                  <Select value={form.animalType} onValueChange={(value) => setForm((prev) => ({ ...prev, animalType: value }))}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
-                    <SelectContent>{animalOptions.map((option) => <SelectItem key={option} value={option}>{option}</SelectItem>)}</SelectContent>
-                  </Select>
-                </div>
-                <div>
-                  <Label>Quantity</Label>
-                  <Input type="number" min={1} value={form.quantity} onChange={(event) => setForm((prev) => ({ ...prev, quantity: Number(event.target.value) }))} />
-                </div>
-                <div>
-                  <Label>Breed</Label>
-                  <Input value={form.breed} onChange={(event) => setForm((prev) => ({ ...prev, breed: event.target.value }))} />
-                </div>
-                <div>
-                  <Label>Total Cost</Label>
-                  <Input type="number" min={0} value={form.totalCost} onChange={(event) => setForm((prev) => ({ ...prev, totalCost: Number(event.target.value) }))} />
-                </div>
-                <div>
-                  <Label>Subsidy Amount</Label>
-                  <Input type="number" min={0} value={form.subsidyAmount} onChange={(event) => setForm((prev) => ({ ...prev, subsidyAmount: Number(event.target.value) }))} />
-                </div>
-                <div>
-                  <Label>Beneficiary Contribution</Label>
-                  <Input type="number" min={0} value={form.beneficiaryContribution} onChange={(event) => setForm((prev) => ({ ...prev, beneficiaryContribution: Number(event.target.value) }))} />
-                </div>
-                <div>
-                  <Label>Officer Name</Label>
-                  <Input value={form.officerName} onChange={(event) => setForm((prev) => ({ ...prev, officerName: event.target.value }))} />
-                </div>
-                <div>
-                  <Label>Inspection Date</Label>
-                  <Input type="date" value={form.inspectionDate} onChange={(event) => setForm((prev) => ({ ...prev, inspectionDate: event.target.value }))} />
-                </div>
-                <div>
-                  <Label>Status</Label>
-                  <Select value={form.status} onValueChange={(value) => setForm((prev) => ({ ...prev, status: value as SchemeStatus }))}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
-                    <SelectContent>{statusOptions.map((option) => <SelectItem key={option} value={option}>{option}</SelectItem>)}</SelectContent>
-                  </Select>
-                </div>
-                <div>
-                  <Label>Aadhaar Document</Label>
-                  <Input type="file" onChange={(event) => setForm((prev) => ({ ...prev, aadhaarFileName: event.target.files?.[0]?.name || "" }))} />
-                </div>
-                <div>
-                  <Label>Photo</Label>
-                  <Input type="file" onChange={(event) => setForm((prev) => ({ ...prev, photoFileName: event.target.files?.[0]?.name || "" }))} />
-                </div>
-                <div>
-                  <Label>Bank Passbook</Label>
-                  <Input type="file" onChange={(event) => setForm((prev) => ({ ...prev, passbookFileName: event.target.files?.[0]?.name || "" }))} />
-                </div>
-              </div>
-              <Button className="mt-4 w-full" onClick={saveBeneficiary}>Save Beneficiary</Button>
-            </DialogContent>
-          </Dialog>
+        <PageHeader title="Livestock Scheme Monitoring" description="Comprehensive scheme management and beneficiary monitoring for district-level livestock distribution programs.">
+          <Button variant="outline" onClick={exportPdf}><Download className="mr-2 h-4 w-4" /> Export PDF</Button>
         </PageHeader>
 
-        <Tabs defaultValue="dashboard" className="space-y-4">
-          <TabsList>
-            <TabsTrigger value="dashboard">Dashboard</TabsTrigger>
-            <TabsTrigger value="list">Scheme List</TabsTrigger>
-            <TabsTrigger value="verification">Verification</TabsTrigger>
-            <TabsTrigger value="reports">Reports</TabsTrigger>
+        {error ? <Card className="border-red-200"><CardContent className="p-4 text-sm text-red-700">Unable to load scheme data: {getErrorMessage(error)}</CardContent></Card> : null}
+
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+          <TabsList className="flex w-full flex-col sm:flex-row gap-2 mb-6">
+            <TabsTrigger value="scheme-management" className="w-full sm:w-auto flex items-center justify-center sm:justify-start gap-2 py-2">
+              <Target className="h-4 w-4" />
+              Scheme Management
+            </TabsTrigger>
+            <TabsTrigger value="beneficiary-monitoring" className="w-full sm:w-auto flex items-center justify-center sm:justify-start gap-2 py-2">
+              <Users className="h-4 w-4" />
+              Beneficiary Monitoring
+            </TabsTrigger>
           </TabsList>
 
-          <TabsContent value="dashboard" className="space-y-4">
-            <div className="grid gap-4 md:grid-cols-4">
-              <Card><CardHeader><CardTitle>Total Target</CardTitle></CardHeader><CardContent className="text-3xl font-semibold">{totalTarget}</CardContent></Card>
-              <Card><CardHeader><CardTitle>Completed</CardTitle></CardHeader><CardContent className="text-3xl font-semibold">{completed}</CardContent></Card>
-              <Card><CardHeader><CardTitle>Pending</CardTitle></CardHeader><CardContent className="text-3xl font-semibold">{pending}</CardContent></Card>
-              <Card><CardHeader><CardTitle>Beneficiary Count</CardTitle></CardHeader><CardContent className="text-3xl font-semibold">{beneficiaries.length}</CardContent></Card>
+          {/* TAB 1: SCHEME MANAGEMENT */}
+          <TabsContent value="scheme-management" className="space-y-6">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+              <StatCard label="Total Target" value={totals.target.toLocaleString()} hint="Scheme beneficiary targets" icon={Target} />
+              <StatCard label="Total Achievement" value={totals.achievement.toLocaleString()} hint="Distributed livestock units" icon={CheckCircle2} tone="blue" />
+              <StatCard label="Pending Cases" value={totals.pending.toLocaleString()} hint="Cases awaiting completion" icon={Clock3} tone="amber" />
+              <StatCard label="Financial Progress" value={formatCurrency(totals.financial)} hint="Recorded expenditure amount" icon={IndianRupee} tone="green" />
             </div>
-            <div className="grid gap-4 md:grid-cols-3">
-              {schemeCounts.map((item) => (
-                <Card key={item.scheme}>
-                  <CardHeader>
-                    <CardTitle>{item.scheme}</CardTitle>
-                  </CardHeader>
-                  <CardContent className="text-2xl font-semibold">{item.count}</CardContent>
-                </Card>
-              ))}
-            </div>
-          </TabsContent>
 
-          <TabsContent value="list" className="space-y-4">
-            <div className="grid gap-4 md:grid-cols-3">
-              {schemeOptions.map((scheme) => (
-                <Card key={scheme} className="border">
-                  <CardHeader>
-                    <CardTitle>{scheme}</CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="mb-2 text-sm text-muted-foreground">Beneficiaries</div>
-                    <div className="text-2xl font-semibold">{beneficiaries.filter((item) => item.scheme === scheme).length}</div>
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
-            <Card>
-              <CardHeader>
-                <CardTitle>Recent Beneficiaries</CardTitle>
-              </CardHeader>
-              <CardContent className="overflow-x-auto">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>S.No.</TableHead>
-                      <TableHead>Institution Name</TableHead>
-                      <TableHead>Backyard Poultry Distribution</TableHead>
-                      <TableHead>Piggery Unit</TableHead>
-                      <TableHead>Male Goat Distribution</TableHead>
-                      <TableHead>Bull Distribution</TableHead>
-                      <TableHead>Female Calf Rearing</TableHead>
-                      <TableHead>Poultry Promotion Scheme</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {recentBeneficiaries.map((row) => (
-                      <TableRow key={row.id}>
-                        <TableCell>{row.id}</TableCell>
-                        <TableCell>{row.institution}</TableCell>
-                        <TableCell>{row.backyardPoultry}</TableCell>
-                        <TableCell>{row.piggeryUnit}</TableCell>
-                        <TableCell>{row.maleGoatDistribution}</TableCell>
-                        <TableCell>{row.bullDistribution}</TableCell>
-                        <TableCell>{row.femaleCalfRearing}</TableCell>
-                        <TableCell>{row.poultryPromotionScheme}</TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </CardContent>
-            </Card>
-          </TabsContent>
-
-          <TabsContent value="verification" className="space-y-4">
-            <Card>
-              <CardHeader>
-                <CardTitle>Officer Verification</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="flex flex-wrap items-center gap-4 pb-4">
-                  <Label htmlFor="status-filter" className="whitespace-nowrap">Status</Label>
-                  <Select id="status-filter" value={statusFilter} onValueChange={(value) => setStatusFilter(value as "All" | SchemeStatus)}>
-                    <SelectTrigger className="w-[180px]"><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      {statusFilterOptions.map((option) => (
-                        <SelectItem key={option} value={option}>{option}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+              <Card className="border-green-200 bg-green-50">
+              <CardHeader className="pb-3">
+                <div className="flex items-center justify-between">
+                  <CardTitle className="text-sm">Scheme Filters & Search</CardTitle>
+                  <Button size="sm" onClick={() => setManageOpen(true)}><Plus className="mr-2 h-4 w-4" /> New Scheme</Button>
                 </div>
-                <div className="overflow-x-auto">
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Institution</TableHead>
-                        <TableHead>Beneficiary</TableHead>
-                        <TableHead>Officer</TableHead>
-                        <TableHead>Inspection Date</TableHead>
-                        <TableHead>Status</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {filteredBeneficiaries.map((beneficiary) => (
-                        <TableRow key={beneficiary.id}>
-                          <TableCell>{beneficiary.institution || "-"}</TableCell>
-                          <TableCell>{beneficiary.name}</TableCell>
-                          <TableCell>{beneficiary.officerName || "Not Assigned"}</TableCell>
-                          <TableCell>{beneficiary.inspectionDate || "-"}</TableCell>
-                          <TableCell>
-                            <Badge variant={beneficiary.status === "Approved" ? "secondary" : beneficiary.status === "Rejected" ? "destructive" : "outline"}>{beneficiary.status}</Badge>
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
+              </CardHeader>
+              <CardContent className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
+                <FilterSelect value={financialYear} onChange={setFinancialYear} allLabel="All Financial Years" options={options.years} />
+                <FilterSelect value={scheme} onChange={setScheme} allLabel="All Schemes" options={schemeNames} />
+                <FilterSelect value={block} onChange={(value) => { setBlock(value); setVillage("All Villages"); }} allLabel="All Blocks" options={options.blocks} />
+                <FilterSelect value={village} onChange={setVillage} allLabel="All Villages" options={options.villages} />
+                <div className="relative">
+                  <Search className="pointer-events-none absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+                  <Input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search scheme" className="pl-9" />
                 </div>
               </CardContent>
             </Card>
+
+            <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+              <Card>
+                <CardHeader><CardTitle className="text-sm">Target vs Achievement Comparison</CardTitle></CardHeader>
+                <CardContent>
+                  <ResponsiveContainer width="100%" height={300}>
+                    <BarChart data={chartRows} margin={{ left: -18, right: 8 }}>
+                      <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                      <XAxis dataKey="shortName" tick={{ fontSize: 10 }} interval={0} angle={-18} textAnchor="end" height={58} />
+                      <YAxis tick={{ fontSize: 11 }} />
+                      <Tooltip cursor={{ fill: "rgba(34, 197, 94, 0.12)" }} />
+                      <Legend />
+                      <Bar name="Target" dataKey="target" fill="#15803d" radius={[4, 4, 0, 0]} />
+                      <Bar name="Achievement" dataKey="achievement" fill="#0284c7" radius={[4, 4, 0, 0]} />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </CardContent>
+              </Card>
+              <Card>
+                <CardHeader><CardTitle className="text-sm">Scheme-wise Physical Progress</CardTitle></CardHeader>
+                <CardContent className="space-y-4">
+                  {chartRows.map((item) => <div key={item.name}><div className="mb-1.5 flex justify-between gap-3 text-sm"><span className="truncate font-medium text-green-900">{item.name}</span><span className="font-semibold text-blue-600">{item.progress}%</span></div><Progress value={item.progress} className="h-2.5 bg-green-100" /></div>)}
+                  {!chartRows.length ? <EmptyMessage text="No schemes match the selected filters." /> : null}
+                </CardContent>
+              </Card>
+            </div>
+
+            <div className="space-y-4">
+              <Card>
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-sm">Scheme Records & Coverage</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="overflow-x-auto">
+                    <SchemeRecordsTable records={dashboardRecords} isLoading={isLoading} canDelete={canDelete} canEdit={canEdit} onView={setViewRecord} onEdit={startEdit} onDelete={(record) => {
+                      if (window.confirm(`Delete ${record.schemeName} record for ${record.village}?`)) deleteMutation.mutate(record.id);
+                    }} />
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
           </TabsContent>
 
-          <TabsContent value="reports" className="space-y-4">
-            <div className="flex flex-wrap gap-3">
-              <Button variant="secondary" onClick={() => toast({ title: "Download PDF", description: "PDF export is not connected yet.", action: <ToastAction altText="Dismiss">OK</ToastAction> })}>
-                <Download className="mr-2 h-4 w-4" /> Download PDF
-              </Button>
-              <Button variant="secondary" onClick={() => toast({ title: "Download Excel", description: "Excel export is not connected yet.", action: <ToastAction altText="Dismiss">OK</ToastAction> })}>
-                <FileText className="mr-2 h-4 w-4" /> Download Excel
-              </Button>
-            </div>
-            <Card>
-              <CardHeader>
-                <CardTitle>Scheme Reports</CardTitle>
-              </CardHeader>
-              <CardContent className="overflow-x-auto">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Scheme</TableHead>
-                      <TableHead>Beneficiaries</TableHead>
-                      <TableHead>Approved</TableHead>
-                      <TableHead>Pending</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {schemeCounts.map((item) => {
-                      const approvedCount = beneficiaries.filter((beneficiary) => beneficiary.scheme === item.scheme && beneficiary.status === "Approved").length;
-                      const pendingCount = beneficiaries.filter((beneficiary) => beneficiary.scheme === item.scheme && beneficiary.status === "Pending").length;
-                      return (
-                        <TableRow key={item.scheme}>
-                          <TableCell>{item.scheme}</TableCell>
-                          <TableCell>{item.count}</TableCell>
-                          <TableCell>{approvedCount}</TableCell>
-                          <TableCell>{pendingCount}</TableCell>
-                        </TableRow>
-                      );
-                    })}
-                  </TableBody>
-                </Table>
-              </CardContent>
-            </Card>
+          {/* TAB 2: BENEFICIARY MONITORING */}
+          <TabsContent value="beneficiary-monitoring" className="space-y-6">
+            <SchemeBeneficiaryManagement records={beneficiaryRecords} schemes={schemeNames} user={user} isLoading={beneficiariesLoading} />
           </TabsContent>
         </Tabs>
       </div>
+
+      <Dialog open={manageOpen} onOpenChange={setManageOpen}>
+        <DialogContent className="max-h-[90vh] max-w-5xl overflow-y-auto">
+          <DialogHeader><DialogTitle>Scheme Data Management</DialogTitle><DialogDescription>Add individual scheme records or validate and upload an Excel workbook. Saved rows update the monitoring dashboard automatically.</DialogDescription></DialogHeader>
+          <Tabs defaultValue="records">
+            <TabsList><TabsTrigger value="records">Data Entry</TabsTrigger><TabsTrigger value="upload">Bulk Upload</TabsTrigger></TabsList>
+            <TabsContent value="records" className="space-y-4">
+              <div className="flex items-center justify-between gap-3 rounded-md border p-3">
+                <div><p className="text-sm font-medium">Scheme records</p><p className="text-xs text-muted-foreground">{canAdd ? "Create a new live scheme record." : "Your role has view-only access."}</p></div>
+                {canAdd ? <Button onClick={startAdd}><Plus className="mr-2 h-4 w-4" /> Add Record</Button> : null}
+              </div>
+              <SchemeRecordsTable records={records} isLoading={isLoading} canDelete={canDelete} canEdit={canEdit} onView={setViewRecord} onEdit={startEdit} onDelete={(record) => {
+                if (window.confirm(`Delete ${record.schemeName} record for ${record.village}?`)) deleteMutation.mutate(record.id);
+              }} compact />
+            </TabsContent>
+            <TabsContent value="upload" className="space-y-4">
+              <div className="rounded-md border border-dashed p-5">
+                <p className="text-sm font-medium">Upload Scheme Data Excel workbook</p>
+                <p className="mt-1 text-xs text-muted-foreground">Download the template, complete its rows, then upload the `.xlsx` file. Every row is validated before saving.</p>
+                <div className="mt-4 flex flex-wrap gap-2">
+                  <Button variant="outline" onClick={downloadTemplate}><Download className="mr-2 h-4 w-4" /> Download Excel Template</Button>
+                  {canAdd ? <Label className="inline-flex cursor-pointer items-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground"><Upload className="mr-2 h-4 w-4" /> Upload Excel File<Input className="hidden" type="file" accept=".xlsx" onChange={(event) => { const file = event.target.files?.[0]; if (file) void handleUpload(file); event.target.value = ""; }} /></Label> : null}
+                </div>
+              </div>
+              {uploadSummary ? <UploadResult summary={uploadSummary} /> : null}
+            </TabsContent>
+          </Tabs>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={formOpen} onOpenChange={setFormOpen}>
+        <DialogContent className="max-h-[90vh] max-w-4xl overflow-y-auto">
+          <DialogHeader><DialogTitle>{editingRecord ? "Edit Scheme Record" : "Add Scheme Record"}</DialogTitle><DialogDescription>Fields are saved directly to the SchemeData sheet.</DialogDescription></DialogHeader>
+          <SchemeRecordForm form={form} setForm={setForm} blockLocked={user?.role === "block_officer" || user?.role === "field_officer"} />
+          <Button onClick={submitForm} disabled={saveMutation.isPending}>{saveMutation.isPending ? "Saving..." : "Save Record"}</Button>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={!!viewRecord} onOpenChange={(open) => { if (!open) setViewRecord(null); }}>
+        <DialogContent><DialogHeader><DialogTitle>Scheme Record Details</DialogTitle></DialogHeader>{viewRecord ? <RecordDetails record={viewRecord} /> : null}</DialogContent>
+      </Dialog>
     </DashboardLayout>
   );
 };
+
+function SchemeRecordForm({ form, setForm, blockLocked }: { form: SchemeForm; setForm: React.Dispatch<React.SetStateAction<SchemeForm>>; blockLocked: boolean }) {
+  const set = (key: keyof SchemeForm, value: string | number) => setForm((current) => ({ ...current, [key]: value }));
+  return <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+    <FormField label="Financial Year"><FilterSelect value={form.financialYear} onChange={(value) => set("financialYear", value)} options={financialYears} /></FormField>
+    <FormField label="Scheme Name"><FilterSelect value={form.schemeName} onChange={(value) => set("schemeName", value)} options={schemeNames} /></FormField>
+    <FormField label="Block"><Input value={form.block} disabled={blockLocked} onChange={(event) => set("block", event.target.value)} /></FormField>
+    <FormField label="Village"><Input value={form.village} onChange={(event) => set("village", event.target.value)} /></FormField>
+    <NumberField label="Target" value={form.target} onChange={(value) => set("target", value)} />
+    <NumberField label="Approved Cases" value={form.approvedCases} onChange={(value) => set("approvedCases", value)} />
+    <NumberField label="Distributed Units" value={form.distributedUnits} onChange={(value) => set("distributedUnits", value)} />
+    <NumberField label="Pending Cases" value={form.pendingCases} onChange={(value) => set("pendingCases", value)} />
+    <NumberField label="Financial Progress Amount" value={form.financialProgressAmount} onChange={(value) => set("financialProgressAmount", value)} />
+    <NumberField label="Physical Progress Percentage" value={form.physicalProgressPercentage} onChange={(value) => set("physicalProgressPercentage", value)} max={100} />
+    <FormField label="Remarks" className="sm:col-span-2 lg:col-span-3"><Textarea value={form.remarks} onChange={(event) => set("remarks", event.target.value)} /></FormField>
+  </div>;
+}
+
+function SchemeRecordsTable({ records, isLoading, canDelete, canEdit, onView, onEdit, onDelete, compact = false }: { records: SchemeDataRecord[]; isLoading: boolean; canDelete: boolean; canEdit: (record: SchemeDataRecord) => boolean; onView: (record: SchemeDataRecord) => void; onEdit: (record: SchemeDataRecord) => void; onDelete: (record: SchemeDataRecord) => void; compact?: boolean }) {
+  const table = <div className="overflow-x-auto"><Table><TableHeader><TableRow><TableHead>Financial Year</TableHead><TableHead className="min-w-[220px]">Scheme Name</TableHead><TableHead>Block</TableHead><TableHead>Village</TableHead><TableHead>Target</TableHead><TableHead>Approved</TableHead><TableHead>Distributed</TableHead><TableHead>Pending</TableHead><TableHead>Financial Amount</TableHead><TableHead>Physical %</TableHead><TableHead className="text-right">Actions</TableHead></TableRow></TableHeader><TableBody>
+    {records.map((record) => <TableRow key={record.id}><TableCell>{record.financialYear}</TableCell><TableCell className="font-medium">{record.schemeName}</TableCell><TableCell>{record.block}</TableCell><TableCell>{record.village}</TableCell><TableCell>{record.target}</TableCell><TableCell>{record.approvedCases}</TableCell><TableCell>{record.distributedUnits}</TableCell><TableCell>{record.pendingCases}</TableCell><TableCell>{formatCurrency(record.financialProgressAmount)}</TableCell><TableCell>{record.physicalProgressPercentage}%</TableCell><TableCell><div className="flex justify-end gap-1"><Button size="icon" variant="ghost" title="View record" onClick={() => onView(record)}><Eye className="h-4 w-4" /></Button>{canEdit(record) ? <Button size="icon" variant="ghost" title="Edit record" onClick={() => onEdit(record)}><Pencil className="h-4 w-4" /></Button> : null}{canDelete ? <Button size="icon" variant="ghost" title="Delete record" onClick={() => onDelete(record)}><Trash2 className="h-4 w-4 text-red-600" /></Button> : null}</div></TableCell></TableRow>)}
+    {!records.length ? <TableRow><TableCell colSpan={11}><EmptyMessage text={isLoading ? "Loading scheme data..." : "No uploaded scheme records found."} /></TableCell></TableRow> : null}
+  </TableBody></Table></div>;
+  return compact ? table : <Card><CardHeader className="pb-3"><CardTitle className="text-sm">Uploaded Scheme Records</CardTitle></CardHeader><CardContent>{table}</CardContent></Card>;
+}
+
+function FilterSelect({ value, onChange, options, allLabel }: { value: string; onChange: (value: string) => void; options: string[]; allLabel?: string }) {
+  return <Select value={value} onValueChange={onChange}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{allLabel ? <SelectItem value={allLabel}>{allLabel}</SelectItem> : null}{options.map((item) => <SelectItem key={item} value={item}>{item}</SelectItem>)}</SelectContent></Select>;
+}
+function FormField({ label, children, className = "" }: { label: string; children: React.ReactNode; className?: string }) { return <div className={className}><Label>{label}</Label><div className="mt-1">{children}</div></div>; }
+function NumberField({ label, value, onChange, max }: { label: string; value: number; onChange: (value: number) => void; max?: number }) { return <FormField label={label}><Input type="number" min={0} max={max} value={value} onChange={(event) => onChange(Number(event.target.value))} /></FormField>; }
+function EmptyMessage({ text }: { text: string }) { return <p className="py-8 text-center text-sm text-muted-foreground">{text}</p>; }
+function UploadResult({ summary }: { summary: NonNullable<UploadSummary> }) { return <div className={`rounded-md border p-4 text-sm ${summary.errors.length ? "border-red-200 bg-red-50 text-red-800" : "border-emerald-200 bg-emerald-50 text-emerald-800"}`}><p className="font-semibold">{summary.errors.length ? "Upload validation failed" : "Upload successful"}</p><p className="mt-1">{summary.success} records saved. {summary.errors.length} errors found.</p>{summary.errors.length ? <ul className="mt-2 list-disc space-y-1 pl-5">{summary.errors.slice(0, 12).map((item, index) => <li key={`${index}-${item}`}>{item}</li>)}</ul> : null}</div>; }
+function RecordDetails({ record }: { record: SchemeDataRecord }) { return <div className="grid gap-3 text-sm sm:grid-cols-2">{Object.entries(toExportRow(record)).map(([label, value]) => <div key={label}><p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{label}</p><p className="mt-1">{String(value || "-")}</p></div>)}</div>; }
+function unique(items: string[]) { return Array.from(new Set(items.filter(Boolean))).sort(); }
+function sum(records: SchemeDataRecord[], key: keyof SchemeDataRecord) { return records.reduce((total, item) => total + Number(item[key] || 0), 0); }
+function sumBeneficiaryUnits(records: SchemeBeneficiaryRecord[]) { return records.reduce((total, item) => total + Number(item.unitsDistributed || 0), 0); }
+function isDateInFinancialYear(value: string, financialYear: string) { const year = Number(financialYear.slice(0, 4)); const date = new Date(value); if (!value || Number.isNaN(date.getTime())) return false; const start = new Date(year, 3, 1); const end = new Date(year + 1, 2, 31, 23, 59, 59); return date >= start && date <= end; }
+function shortenScheme(name: string) { return name.replace(" Distribution", "").replace("Chhattisgarh ", "").replace(" Yojana", ""); }
+function formatCurrency(value: number) { return new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 0 }).format(value); }
+function getErrorMessage(error: unknown) { return error instanceof Error ? error.message : "Unexpected error"; }
+function matchesBlock(region: string, block: string) { const own = String(region || "").toLowerCase(); const target = String(block || "").toLowerCase(); return !!own && !!target && (own.includes(target) || target.includes(own)); }
+function validateSchemeRecord(record: SchemeForm | Partial<SchemeDataRecord>) {
+  if (!record.financialYear || !record.schemeName || !record.block || !record.village) return "Financial year, scheme name, block and village are required.";
+  const values = [record.target, record.approvedCases, record.distributedUnits, record.pendingCases, record.financialProgressAmount, record.physicalProgressPercentage];
+  if (values.some((value) => !Number.isFinite(Number(value)) || Number(value) < 0)) return "All numeric fields must contain non-negative numbers.";
+  if (Number(record.physicalProgressPercentage) > 100) return "Physical progress percentage cannot exceed 100.";
+  if (Number(record.approvedCases) > Number(record.target)) return "Approved cases cannot exceed target.";
+  if (Number(record.distributedUnits) > Number(record.approvedCases)) return "Distributed units cannot exceed approved cases.";
+  return "";
+}
+function normalizeHeader(value: string) { return value.toLowerCase().replace(/[^a-z0-9]/g, ""); }
+function toSchemeRecord(row: Record<string, unknown>): SchemeForm {
+  const normalized = Object.fromEntries(Object.entries(row).map(([key, value]) => [normalizeHeader(key), value]));
+  const text = (key: string) => String(normalized[normalizeHeader(key)] ?? "").trim();
+  const number = (key: string) => Number(normalized[normalizeHeader(key)] ?? 0);
+  return { financialYear: text("Financial Year"), schemeName: text("Scheme Name"), block: text("Block"), village: text("Village"), target: number("Target"), approvedCases: number("Approved Cases"), distributedUnits: number("Distributed Units"), pendingCases: number("Pending Cases"), financialProgressAmount: number("Financial Progress Amount"), physicalProgressPercentage: number("Physical Progress Percentage"), remarks: text("Remarks") };
+}
+function toExportRow(record: SchemeDataRecord) { return { "Financial Year": record.financialYear, "Scheme Name": record.schemeName, Block: record.block, Village: record.village, Target: record.target, "Approved Cases": record.approvedCases, "Distributed Units": record.distributedUnits, "Pending Cases": record.pendingCases, "Financial Progress Amount": record.financialProgressAmount, "Physical Progress Percentage": record.physicalProgressPercentage, Remarks: record.remarks }; }
 
 export default SchemesPage;

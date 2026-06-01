@@ -13,6 +13,8 @@ import type {
   GeoTaggedPhotoEvidence,
   PregnancyRecord,
   ReminderItem,
+  SchemeBeneficiaryRecord,
+  SchemeDataRecord,
   UserDirectoryRecord,
   Vaccination,
   VillageInsight,
@@ -286,6 +288,70 @@ function normalizeLocations(input: unknown): LocationRecord[] {
       gramPanchayat: String(row.gramPanchayat ?? ""),
       village: String(row.village ?? ""),
       status: String(row.status ?? "Active"),
+    };
+  });
+}
+
+function normalizeSchemeDataRecords(input: unknown): SchemeDataRecord[] {
+  if (!Array.isArray(input)) {
+    return [];
+  }
+
+  return input.map((item, idx) => {
+    const row = (item ?? {}) as Record<string, unknown>;
+    return {
+      id: String(row.id ?? `SCH-${idx + 1}`),
+      financialYear: String(row.financialYear ?? ""),
+      schemeName: String(row.schemeName ?? ""),
+      block: String(row.block ?? ""),
+      village: String(row.village ?? ""),
+      target: toNumber(row.target),
+      approvedCases: toNumber(row.approvedCases),
+      distributedUnits: toNumber(row.distributedUnits),
+      pendingCases: toNumber(row.pendingCases),
+      financialProgressAmount: toNumber(row.financialProgressAmount),
+      physicalProgressPercentage: toNumber(row.physicalProgressPercentage),
+      remarks: String(row.remarks ?? ""),
+      createdAt: String(row.createdAt ?? ""),
+      updatedAt: String(row.updatedAt ?? ""),
+      createdBy: String(row.createdBy ?? ""),
+    };
+  });
+}
+
+function normalizeSchemeBeneficiaryRecords(input: unknown): SchemeBeneficiaryRecord[] {
+  if (!Array.isArray(input)) {
+    return [];
+  }
+
+  return input.map((item, idx) => {
+    const row = (item ?? {}) as Record<string, unknown>;
+    return {
+      id: String(row.id ?? `BEN-${idx + 1}`),
+      beneficiaryName: String(row.beneficiaryName ?? ""),
+      fatherHusbandName: String(row.fatherHusbandName ?? ""),
+      mobileNumber: String(row.mobileNumber ?? ""),
+      aadhaarNumber: String(row.aadhaarNumber ?? ""),
+      rationCardNumber: String(row.rationCardNumber ?? ""),
+      bankAccountNumber: String(row.bankAccountNumber ?? ""),
+      ifscCode: String(row.ifscCode ?? ""),
+      village: String(row.village ?? ""),
+      gramPanchayat: String(row.gramPanchayat ?? ""),
+      block: String(row.block ?? ""),
+      category: String(row.category ?? "General") as SchemeBeneficiaryRecord["category"],
+      womenBeneficiary: String(row.womenBeneficiary ?? "No") as SchemeBeneficiaryRecord["womenBeneficiary"],
+      pvtg: String(row.pvtg ?? "No") as SchemeBeneficiaryRecord["pvtg"],
+      fraBeneficiary: String(row.fraBeneficiary ?? "No") as SchemeBeneficiaryRecord["fraBeneficiary"],
+      schemeName: String(row.schemeName ?? ""),
+      dateOfApproval: String(row.dateOfApproval ?? ""),
+      dateOfDistribution: String(row.dateOfDistribution ?? ""),
+      unitsDistributed: toNumber(row.unitsDistributed),
+      distributionPhotoUrl: String(row.distributionPhotoUrl ?? ""),
+      distributionPhotoFileId: String(row.distributionPhotoFileId ?? ""),
+      remarks: String(row.remarks ?? ""),
+      createdAt: String(row.createdAt ?? ""),
+      updatedAt: String(row.updatedAt ?? ""),
+      createdBy: String(row.createdBy ?? ""),
     };
   });
 }
@@ -739,6 +805,54 @@ export async function updateLocation(input: LocationRecord): Promise<LocationRec
 
 export async function deleteLocation(id: string, input?: Partial<LocationRecord>): Promise<{ id: string; deleted: boolean }> {
   return callAppsScript<{ id: string; deleted: boolean }>("locations.delete", { id, input });
+}
+
+export async function listSchemeDataRecords(): Promise<SchemeDataRecord[]> {
+  const raw = await callAppsScript<unknown>("schemeData.list");
+  return normalizeSchemeDataRecords(raw);
+}
+
+export async function createSchemeDataRecord(input: Omit<SchemeDataRecord, "id" | "createdAt" | "updatedAt" | "createdBy">): Promise<SchemeDataRecord> {
+  const raw = await callAppsScript<unknown>("schemeData.create", { input });
+  return normalizeSchemeDataRecords([raw])[0];
+}
+
+export async function updateSchemeDataRecord(input: SchemeDataRecord): Promise<SchemeDataRecord> {
+  const raw = await callAppsScript<unknown>("schemeData.update", { input });
+  return normalizeSchemeDataRecords([raw])[0];
+}
+
+export async function deleteSchemeDataRecord(id: string): Promise<{ id: string; deleted: boolean }> {
+  return callAppsScript<{ id: string; deleted: boolean }>("schemeData.delete", { id });
+}
+
+export async function bulkUpsertSchemeDataRecords(records: Array<Partial<SchemeDataRecord>>): Promise<{ saved: number; records: SchemeDataRecord[] }> {
+  const raw = await callAppsScript<{ saved: number; records: unknown }>("schemeData.bulkUpsert", { records });
+  return { saved: Number(raw.saved || 0), records: normalizeSchemeDataRecords(raw.records) };
+}
+
+export async function listSchemeBeneficiaryRecords(): Promise<SchemeBeneficiaryRecord[]> {
+  const raw = await callAppsScript<unknown>("schemeBeneficiaries.list");
+  return normalizeSchemeBeneficiaryRecords(raw);
+}
+
+export async function createSchemeBeneficiaryRecord(input: Omit<SchemeBeneficiaryRecord, "id" | "createdAt" | "updatedAt" | "createdBy" | "distributionPhotoUrl" | "distributionPhotoFileId"> & { distributionPhotoDataUrl?: string; distributionPhotoFileName?: string }): Promise<SchemeBeneficiaryRecord> {
+  const raw = await callAppsScript<unknown>("schemeBeneficiaries.create", { input });
+  return normalizeSchemeBeneficiaryRecords([raw])[0];
+}
+
+export async function updateSchemeBeneficiaryRecord(input: SchemeBeneficiaryRecord & { distributionPhotoDataUrl?: string; distributionPhotoFileName?: string }): Promise<SchemeBeneficiaryRecord> {
+  const raw = await callAppsScript<unknown>("schemeBeneficiaries.update", { input });
+  return normalizeSchemeBeneficiaryRecords([raw])[0];
+}
+
+export async function deleteSchemeBeneficiaryRecord(id: string): Promise<{ id: string; deleted: boolean }> {
+  return callAppsScript<{ id: string; deleted: boolean }>("schemeBeneficiaries.delete", { id });
+}
+
+export async function bulkUpsertSchemeBeneficiaryRecords(records: Array<Partial<SchemeBeneficiaryRecord>>): Promise<{ saved: number; records: SchemeBeneficiaryRecord[] }> {
+  const raw = await callAppsScript<{ saved: number; records: unknown }>("schemeBeneficiaries.bulkUpsert", { records });
+  return { saved: Number(raw.saved || 0), records: normalizeSchemeBeneficiaryRecords(raw.records) };
 }
 
 export async function listAlerts(): Promise<AlertItem[]> {

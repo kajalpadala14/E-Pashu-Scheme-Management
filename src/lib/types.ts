@@ -143,6 +143,52 @@ export interface LocationRecord {
   status: string;
 }
 
+export interface SchemeDataRecord {
+  id: string;
+  financialYear: string;
+  schemeName: string;
+  block: string;
+  village: string;
+  target: number;
+  approvedCases: number;
+  distributedUnits: number;
+  pendingCases: number;
+  financialProgressAmount: number;
+  physicalProgressPercentage: number;
+  remarks: string;
+  createdAt: string;
+  updatedAt: string;
+  createdBy: string;
+}
+
+export interface SchemeBeneficiaryRecord {
+  id: string;
+  beneficiaryName: string;
+  fatherHusbandName: string;
+  mobileNumber: string;
+  aadhaarNumber: string;
+  rationCardNumber: string;
+  bankAccountNumber: string;
+  ifscCode: string;
+  village: string;
+  gramPanchayat: string;
+  block: string;
+  category: "General" | "OBC" | "SC" | "ST";
+  womenBeneficiary: "Yes" | "No";
+  pvtg: "Yes" | "No";
+  fraBeneficiary: "Yes" | "No";
+  schemeName: string;
+  dateOfApproval: string;
+  dateOfDistribution: string;
+  unitsDistributed: number;
+  distributionPhotoUrl: string;
+  distributionPhotoFileId: string;
+  remarks: string;
+  createdAt: string;
+  updatedAt: string;
+  createdBy: string;
+}
+
 export interface ReminderItem {
   id: string;
   village: string;
@@ -246,7 +292,7 @@ export interface UserDirectoryRecord {
   id: string;
   name: string;
   email: string;
-  role: "admin" | "veterinary_doctor" | "field_officer" | "departmental_officer" | "deputy_director_vet";
+  role: "admin" | "veterinary_doctor" | "field_officer" | "block_officer" | "data_entry_operator" | "departmental_officer" | "deputy_director_vet";
   region: string;
   active: boolean;
   createdAt: string;
