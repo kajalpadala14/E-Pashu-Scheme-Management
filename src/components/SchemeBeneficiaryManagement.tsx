@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useDeferredValue, useMemo, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import * as XLSX from "xlsx";
 import { Bar, BarChart, CartesianGrid, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
@@ -46,6 +46,7 @@ export function SchemeBeneficiaryManagement({ records, schemes, user, isLoading 
   const [editing, setEditing] = useState<SchemeBeneficiaryRecord | null>(null);
   const [form, setForm] = useState<BeneficiaryForm>({ ...emptyForm });
   const [uploadSummary, setUploadSummary] = useState<UploadSummary>(null);
+  const deferredSearch = useDeferredValue(search);
 
   const canWrite = user?.role === "admin" || user?.role === "data_entry_operator" || user?.role === "block_officer" || user?.role === "field_officer";
   const canDelete = user?.role === "admin";
@@ -55,8 +56,8 @@ export function SchemeBeneficiaryManagement({ records, schemes, user, isLoading 
     && (village === "All Villages" || item.village === village)
     && (block === "All Blocks" || item.block === block)
     && (category === "All Categories" || item.category === category)
-    && `${item.beneficiaryName} ${item.mobileNumber} ${item.village}`.toLowerCase().includes(search.toLowerCase())
-  )), [block, category, records, scheme, search, village]);
+    && `${item.beneficiaryName} ${item.mobileNumber} ${item.village}`.toLowerCase().includes(deferredSearch.toLowerCase())
+  )), [block, category, deferredSearch, records, scheme, village]);
 
   const analytics = useMemo(() => ({
     byScheme: schemes.map((name) => ({ name: shorten(name), beneficiaries: filtered.filter((item) => item.schemeName === name).length })).filter((item) => item.beneficiaries),
@@ -119,7 +120,7 @@ export function SchemeBeneficiaryManagement({ records, schemes, user, isLoading 
   return <div className="space-y-4">
     <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
       <div><h3 className="text-lg font-semibold">Beneficiary Management</h3><p className="text-sm text-muted-foreground">Individual scheme benefit distribution records and coverage analytics.</p></div>
-      <div className="flex flex-wrap gap-2"><Button variant="outline" onClick={exportExcel}><FileSpreadsheet className="mr-2 h-4 w-4" /> Export Excel</Button>{canWrite ? <Button onClick={add}><Plus className="mr-2 h-4 w-4" /> Add Beneficiary</Button> : null}</div>
+      <div className="grid w-full gap-2 sm:flex sm:w-auto sm:flex-wrap"><Button variant="outline" onClick={exportExcel} className="h-10 w-full sm:w-auto"><FileSpreadsheet className="mr-2 h-4 w-4" /> Export Excel</Button>{canWrite ? <Button onClick={add} className="h-10 w-full sm:w-auto"><Plus className="mr-2 h-4 w-4" /> Add Beneficiary</Button> : null}</div>
     </div>
 
     <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
@@ -143,11 +144,11 @@ export function SchemeBeneficiaryManagement({ records, schemes, user, isLoading 
       <div className="relative"><Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" /><Input className="pl-9" placeholder="Search beneficiary" value={search} onChange={(event) => setSearch(event.target.value)} /></div>
     </CardContent></Card>
 
-    {canWrite ? <Card><CardContent className="flex flex-wrap items-center justify-between gap-3 p-4"><div><p className="text-sm font-medium">Bulk beneficiary import</p><p className="text-xs text-muted-foreground">Validate and save beneficiary records from an Excel workbook.</p></div><div className="flex flex-wrap gap-2"><Button variant="outline" onClick={downloadTemplate}><Download className="mr-2 h-4 w-4" /> Template</Button><Label className="inline-flex cursor-pointer items-center rounded-md bg-secondary px-4 py-2 text-sm font-medium"><Upload className="mr-2 h-4 w-4" /> Import Excel<Input className="hidden" type="file" accept=".xlsx" onChange={(event) => { const file = event.target.files?.[0]; if (file) void uploadExcel(file); event.target.value = ""; }} /></Label></div></CardContent>{uploadSummary ? <CardContent className="pt-0"><UploadResult result={uploadSummary} /></CardContent> : null}</Card> : null}
+    {canWrite ? <Card><CardContent className="flex flex-col items-stretch justify-between gap-3 p-4 sm:flex-row sm:items-center"><div><p className="text-sm font-medium">Bulk beneficiary import</p><p className="text-xs text-muted-foreground">Validate and save beneficiary records from an Excel workbook.</p></div><div className="grid gap-2 sm:flex sm:flex-wrap"><Button variant="outline" onClick={downloadTemplate} className="h-10 w-full sm:w-auto"><Download className="mr-2 h-4 w-4" /> Template</Button><Label className="inline-flex h-10 w-full cursor-pointer items-center justify-center rounded-md bg-secondary px-4 py-2 text-sm font-medium sm:w-auto"><Upload className="mr-2 h-4 w-4" /> Import Excel<Input className="hidden" type="file" accept=".xlsx" onChange={(event) => { const file = event.target.files?.[0]; if (file) void uploadExcel(file); event.target.value = ""; }} /></Label></div></CardContent>{uploadSummary ? <CardContent className="pt-0"><UploadResult result={uploadSummary} /></CardContent> : null}</Card> : null}
 
     <BeneficiaryTable records={filtered} loading={isLoading} canEdit={canEdit} canDelete={canDelete} onView={setViewRecord} onEdit={edit} onDelete={(record) => { if (window.confirm(`Delete beneficiary ${record.beneficiaryName}?`)) deleteMutation.mutate(record.id); }} />
 
-    <Dialog open={formOpen} onOpenChange={setFormOpen}><DialogContent className="max-h-[90vh] max-w-5xl overflow-y-auto"><DialogHeader><DialogTitle>{editing ? "Edit Beneficiary" : "Add Beneficiary"}</DialogTitle><DialogDescription>Personal identity and bank details are stored securely and masked outside administrator detail views.</DialogDescription></DialogHeader><BeneficiaryFormFields form={form} setForm={setForm} schemes={schemes} lockBlock={user?.role === "block_officer" || user?.role === "field_officer"} /><Button onClick={save} disabled={saveMutation.isPending}>{saveMutation.isPending ? "Saving..." : "Save Beneficiary"}</Button></DialogContent></Dialog>
+    <Dialog open={formOpen} onOpenChange={setFormOpen}><DialogContent className="max-h-[90vh] max-w-5xl overflow-y-auto"><DialogHeader><DialogTitle>{editing ? "Edit Beneficiary" : "Add Beneficiary"}</DialogTitle><DialogDescription>Personal identity and bank details are stored securely and masked outside administrator detail views.</DialogDescription></DialogHeader><BeneficiaryFormFields form={form} setForm={setForm} schemes={schemes} lockBlock={user?.role === "block_officer" || user?.role === "field_officer"} /><div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end"><Button variant="outline" className="h-10 w-full sm:w-auto" onClick={() => setFormOpen(false)}>Cancel</Button><Button onClick={save} disabled={saveMutation.isPending} className="h-10 w-full sm:w-auto">{saveMutation.isPending ? "Saving..." : "Save Beneficiary"}</Button></div></DialogContent></Dialog>
     <Dialog open={!!viewRecord} onOpenChange={(open) => { if (!open) setViewRecord(null); }}><DialogContent className="max-h-[90vh] max-w-3xl overflow-y-auto"><DialogHeader><DialogTitle>Beneficiary Details</DialogTitle><DialogDescription>{user?.role === "admin" ? "Administrator detail view" : "Sensitive identifiers remain masked for your role."}</DialogDescription></DialogHeader>{viewRecord ? <Details record={viewRecord} admin={user?.role === "admin"} /> : null}</DialogContent></Dialog>
   </div>;
 }
@@ -168,7 +169,7 @@ function BeneficiaryFormFields({ form, setForm, schemes, lockBlock }: { form: Be
 
 function BeneficiaryTable({ records, loading, canEdit, canDelete, onView, onEdit, onDelete }: { records: SchemeBeneficiaryRecord[]; loading: boolean; canEdit: (record: SchemeBeneficiaryRecord) => boolean; canDelete: boolean; onView: (record: SchemeBeneficiaryRecord) => void; onEdit: (record: SchemeBeneficiaryRecord) => void; onDelete: (record: SchemeBeneficiaryRecord) => void }) {
   return <Card><CardHeader><CardTitle className="text-sm">Beneficiary Records</CardTitle></CardHeader><CardContent className="overflow-x-auto"><Table><TableHeader><TableRow><TableHead>Name</TableHead><TableHead>Mobile</TableHead><TableHead>Aadhaar</TableHead><TableHead>Bank Account</TableHead><TableHead>Village</TableHead><TableHead>Block</TableHead><TableHead>Category</TableHead><TableHead>Scheme</TableHead><TableHead>Units</TableHead><TableHead>Distribution Date</TableHead><TableHead className="text-right">Actions</TableHead></TableRow></TableHeader><TableBody>
-    {records.map((item) => <TableRow key={item.id}><TableCell className="font-medium">{item.beneficiaryName}</TableCell><TableCell>{item.mobileNumber}</TableCell><TableCell>{mask(item.aadhaarNumber)}</TableCell><TableCell>{mask(item.bankAccountNumber)}</TableCell><TableCell>{item.village}</TableCell><TableCell>{item.block}</TableCell><TableCell><Badge variant="outline">{item.category}</Badge></TableCell><TableCell>{item.schemeName}</TableCell><TableCell>{item.unitsDistributed}</TableCell><TableCell>{item.dateOfDistribution || "-"}</TableCell><TableCell><div className="flex justify-end gap-1"><Button size="icon" variant="ghost" onClick={() => onView(item)}><Eye className="h-4 w-4" /></Button>{canEdit(item) ? <Button size="icon" variant="ghost" onClick={() => onEdit(item)}><Pencil className="h-4 w-4" /></Button> : null}{canDelete ? <Button size="icon" variant="ghost" onClick={() => onDelete(item)}><Trash2 className="h-4 w-4 text-red-600" /></Button> : null}</div></TableCell></TableRow>)}
+    {records.map((item) => <TableRow key={item.id}><TableCell className="font-medium">{item.beneficiaryName}</TableCell><TableCell>{item.mobileNumber}</TableCell><TableCell>{mask(item.aadhaarNumber)}</TableCell><TableCell>{mask(item.bankAccountNumber)}</TableCell><TableCell>{item.village}</TableCell><TableCell>{item.block}</TableCell><TableCell><Badge variant="outline">{item.category}</Badge></TableCell><TableCell>{item.schemeName}</TableCell><TableCell>{item.unitsDistributed}</TableCell><TableCell>{item.dateOfDistribution || "-"}</TableCell><TableCell><div className="flex justify-end gap-1"><Button size="icon" variant="ghost" aria-label={`View ${item.beneficiaryName}`} onClick={() => onView(item)}><Eye className="h-4 w-4" /></Button>{canEdit(item) ? <Button size="icon" variant="ghost" aria-label={`Edit ${item.beneficiaryName}`} onClick={() => onEdit(item)}><Pencil className="h-4 w-4" /></Button> : null}{canDelete ? <Button size="icon" variant="ghost" aria-label={`Delete ${item.beneficiaryName}`} onClick={() => onDelete(item)}><Trash2 className="h-4 w-4 text-red-600" /></Button> : null}</div></TableCell></TableRow>)}
     {!records.length ? <TableRow><TableCell colSpan={11} className="h-24 text-center text-muted-foreground">{loading ? "Loading beneficiaries..." : "No beneficiary records found."}</TableCell></TableRow> : null}
   </TableBody></Table></CardContent></Card>;
 }

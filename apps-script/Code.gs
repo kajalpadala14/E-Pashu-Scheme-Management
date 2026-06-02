@@ -16,11 +16,12 @@ var SHEETS = {
   HEALTH_RECORDS: "HealthRecords",
   MONTHLY_ACTIVITY: "MonthlyActivity",
   USERS: "Users",
+  SCHEME_DATA: "SchemeData",
+  SCHEME_BENEFICIARIES: "SchemeBeneficiaries",
+  AUDIT_LOGS: "AuditLogs",
   PHOTO_EVIDENCE: "PhotoEvidence",
   DAILY_REPORTS: "DailyFieldReports",
-  EMERGENCIES: "EmergencyReports",
-  SCHEME_DATA: "SchemeData",
-  SCHEME_BENEFICIARIES: "SchemeBeneficiaries"
+  EMERGENCIES: "EmergencyReports"
 };
 
 // Default headers used when auto-creating sheets.
@@ -44,11 +45,12 @@ DEFAULT_SHEET_HEADERS[SHEETS.HEALTH_STATUS] = ["name","value","fill"];
 DEFAULT_SHEET_HEADERS[SHEETS.HEALTH_RECORDS] = ["id","animalId","date","condition","diagnosis","symptoms","treatment","doctorName","medicine","recoveryStatus","isolationStatus","criticalAlert","notes","status","recordDate"];
 DEFAULT_SHEET_HEADERS[SHEETS.MONTHLY_ACTIVITY] = ["month","registered","vaccinated","alerts"];
 DEFAULT_SHEET_HEADERS[SHEETS.USERS] = ["id","name","email","role","region","active","createdAt","updatedAt"];
+DEFAULT_SHEET_HEADERS[SHEETS.SCHEME_DATA] = ["id","financialYear","schemeName","block","village","target","approvedCases","distributedUnits","pendingCases","financialProgressAmount","physicalProgressPercentage","remarks","createdAt","updatedAt","createdBy"];
+DEFAULT_SHEET_HEADERS[SHEETS.SCHEME_BENEFICIARIES] = ["id","beneficiaryName","fatherHusbandName","mobileNumber","aadhaarNumber","rationCardNumber","bankAccountNumber","ifscCode","village","gramPanchayat","block","category","womenBeneficiary","pvtg","fraBeneficiary","schemeName","dateOfApproval","dateOfDistribution","unitsDistributed","distributionPhotoUrl","distributionPhotoFileId","remarks","createdAt","updatedAt","createdBy"];
+DEFAULT_SHEET_HEADERS[SHEETS.AUDIT_LOGS] = ["id","module","action","recordId","timestamp","details"];
 DEFAULT_SHEET_HEADERS[SHEETS.PHOTO_EVIDENCE] = ["id","animalId","tagId","officerName","district","tehsil","block","gramPanchayat","village","latitude","longitude","capturedAt","capturedDate","capturedTime","module","caption","photoUrl","driveFileId","driveFileUrl","fileName","verificationStatus","submittedAt"];
 DEFAULT_SHEET_HEADERS[SHEETS.DAILY_REPORTS] = ["id","officerName","reportDate","villagesVisited","animalsVaccinated","diseaseCasesIdentified","pregnantAnimalsChecked","photosUploaded","notes","status","submittedAt"];
 DEFAULT_SHEET_HEADERS[SHEETS.EMERGENCIES] = ["id","officerName","village","animalId","type","priority","reportedAt","status","summary","district","tehsil","block","gramPanchayat"];
-DEFAULT_SHEET_HEADERS[SHEETS.SCHEME_DATA] = ["id","financialYear","schemeName","block","village","target","approvedCases","distributedUnits","pendingCases","financialProgressAmount","physicalProgressPercentage","remarks","createdAt","updatedAt","createdBy"];
-DEFAULT_SHEET_HEADERS[SHEETS.SCHEME_BENEFICIARIES] = ["id","beneficiaryName","fatherHusbandName","mobileNumber","aadhaarNumber","rationCardNumber","bankAccountNumber","ifscCode","village","gramPanchayat","block","category","womenBeneficiary","pvtg","fraBeneficiary","schemeName","dateOfApproval","dateOfDistribution","unitsDistributed","distributionPhotoUrl","distributionPhotoFileId","remarks","createdAt","updatedAt","createdBy"];
 
 // Primary spreadsheet ID. Update this only if you move data to another sheet.
 var DEFAULT_SPREADSHEET_ID = "1yLqcwQDfhkB33TLxppcFlmYRIhvmxKqCBlm_jpDQVqI";
@@ -80,11 +82,16 @@ var ROLE_ACTIONS = {
     "healthRecords.list",
     "analytics.villageInsights",
     "reminders.list",
-    "reminders.create",
-    "reminders.send",
-    "fieldOfficers.list",
-    "tasks.list",
-    "tasks.toggle",
+    "schemeData.list",
+    "schemeData.create",
+    "schemeData.update",
+    "schemeData.delete",
+    "schemeData.bulkUpsert",
+    "schemeBeneficiaries.list",
+    "schemeBeneficiaries.create",
+    "schemeBeneficiaries.update",
+    "schemeBeneficiaries.delete",
+    "schemeBeneficiaries.bulkUpsert",
     "photoEvidence.list",
     "photoEvidence.create",
     "dailyReports.list",
@@ -93,24 +100,75 @@ var ROLE_ACTIONS = {
     "emergencies.create",
     "reports.list",
     "users.lookupByEmail",
-    "users.list",
+    "users.list"
+  ],
+  block_officer: [
+    "dashboard.get",
+    "locations.list",
+    "animals.list",
+    "farmers.list",
+    "vaccinations.list",
+    "breeding.list",
+    "pregnancy.list",
+    "alerts.list",
+    "healthRecords.list",
+    "analytics.villageInsights",
+    "reminders.list",
     "schemeData.list",
     "schemeData.create",
     "schemeData.update",
-    "schemeData.bulkUpsert"
-    ,"schemeBeneficiaries.list"
-    ,"schemeBeneficiaries.create"
-    ,"schemeBeneficiaries.update"
-    ,"schemeBeneficiaries.bulkUpsert"
+    "schemeData.delete",
+    "schemeData.bulkUpsert",
+    "schemeBeneficiaries.list",
+    "schemeBeneficiaries.create",
+    "schemeBeneficiaries.update",
+    "schemeBeneficiaries.delete",
+    "schemeBeneficiaries.bulkUpsert",
+    "photoEvidence.list",
+    "photoEvidence.create",
+    "dailyReports.list",
+    "dailyReports.create",
+    "emergencies.list",
+    "reports.list",
+    "users.list"
   ],
-  block_officer: ["locations.list", "schemeData.list", "schemeData.create", "schemeData.update", "schemeData.bulkUpsert", "schemeBeneficiaries.list", "schemeBeneficiaries.create", "schemeBeneficiaries.update", "schemeBeneficiaries.bulkUpsert", "users.lookupByEmail"],
-  data_entry_operator: ["locations.list", "schemeData.list", "schemeData.create", "schemeData.update", "schemeData.bulkUpsert", "schemeBeneficiaries.list", "schemeBeneficiaries.create", "schemeBeneficiaries.update", "schemeBeneficiaries.bulkUpsert", "users.lookupByEmail"]
+  data_entry_operator: [
+    "dashboard.get",
+    "locations.list",
+    "animals.list",
+    "animals.create",
+    "farmers.list",
+    "farmers.create",
+    "vaccinations.list",
+    "breeding.list",
+    "pregnancy.list",
+    "pregnancy.create",
+    "alerts.list",
+    "healthRecords.list",
+    "analytics.villageInsights",
+    "reminders.list",
+    "schemeData.list",
+    "schemeData.create",
+    "schemeData.update",
+    "schemeData.bulkUpsert",
+    "schemeBeneficiaries.list",
+    "schemeBeneficiaries.create",
+    "schemeBeneficiaries.update",
+    "schemeBeneficiaries.bulkUpsert",
+    "photoEvidence.list",
+    "photoEvidence.create",
+    "dailyReports.list",
+    "dailyReports.create",
+    "emergencies.list",
+    "reports.list",
+    "users.list"
+  ]
 };
 
 function doPost(e) {
   try {
     var body = JSON.parse(e.postData.contents || "{}");
-    var action = String(body.action || "").trim().toLowerCase();
+    var action = body.action;
     var payload = body.payload || {};
     var requestMeta = payload._meta || {};
 
@@ -144,36 +202,6 @@ function doPost(e) {
         break;
       case "locations.delete":
         data = deleteLocation_(payload.id, payload.input);
-        break;
-      case "schemeData.list":
-        data = listRows_(SHEETS.SCHEME_DATA);
-        break;
-      case "schemeData.create":
-        data = createSchemeData_(payload.input, requestMeta);
-        break;
-      case "schemeData.update":
-        data = updateSchemeData_(payload.input, requestMeta);
-        break;
-      case "schemeData.delete":
-        data = deleteSchemeData_(payload.id, requestMeta);
-        break;
-      case "schemeData.bulkUpsert":
-        data = bulkUpsertSchemeData_(payload.records, requestMeta);
-        break;
-      case "schemeBeneficiaries.list":
-        data = listSchemeBeneficiaries_(requestMeta);
-        break;
-      case "schemeBeneficiaries.create":
-        data = createSchemeBeneficiary_(payload.input, requestMeta);
-        break;
-      case "schemeBeneficiaries.update":
-        data = updateSchemeBeneficiary_(payload.input, requestMeta);
-        break;
-      case "schemeBeneficiaries.delete":
-        data = deleteSchemeBeneficiary_(payload.id, requestMeta);
-        break;
-      case "schemeBeneficiaries.bulkUpsert":
-        data = bulkUpsertSchemeBeneficiaries_(payload.records, requestMeta);
         break;
       case "animals.list":
         data = listRows_(SHEETS.ANIMALS);
@@ -252,6 +280,36 @@ function doPost(e) {
         break;
       case "users.delete":
         data = deleteUserByEmail_(payload.email);
+        break;
+      case "schemeData.list":
+        data = listRows_(SHEETS.SCHEME_DATA);
+        break;
+      case "schemeData.create":
+        data = createSchemeDataRecord_(payload.input, requestMeta);
+        break;
+      case "schemeData.update":
+        data = updateSchemeDataRecord_(payload.input, requestMeta);
+        break;
+      case "schemeData.delete":
+        data = deleteRowById_(SHEETS.SCHEME_DATA, payload.id);
+        break;
+      case "schemeData.bulkUpsert":
+        data = bulkUpsertSchemeDataRecords_(payload.records, requestMeta);
+        break;
+      case "schemeBeneficiaries.list":
+        data = listRows_(SHEETS.SCHEME_BENEFICIARIES);
+        break;
+      case "schemeBeneficiaries.create":
+        data = createSchemeBeneficiaryRecord_(payload.input, requestMeta);
+        break;
+      case "schemeBeneficiaries.update":
+        data = updateSchemeBeneficiaryRecord_(payload.input, requestMeta);
+        break;
+      case "schemeBeneficiaries.delete":
+        data = deleteRowById_(SHEETS.SCHEME_BENEFICIARIES, payload.id);
+        break;
+      case "schemeBeneficiaries.bulkUpsert":
+        data = bulkUpsertSchemeBeneficiaryRecords_(payload.records, requestMeta);
         break;
       case "photoEvidence.list":
         data = listRows_(SHEETS.PHOTO_EVIDENCE);
@@ -1171,278 +1229,6 @@ function findLocationRow_(values, input) {
   return -1;
 }
 
-function createSchemeData_(input, requestMeta) {
-  var row = normalizeSchemeDataInput_(input);
-  assertSchemeWriteAllowed_(requestMeta, row.block, false);
-  row.id = input.id || ("SCH-" + new Date().getTime());
-  row.createdAt = input.createdAt || new Date().toISOString();
-  row.updatedAt = new Date().toISOString();
-  row.createdBy = normalizeEmail_(requestMeta && requestMeta.email);
-  upsertRowById_(SHEETS.SCHEME_DATA, row);
-  return row;
-}
-
-function updateSchemeData_(input, requestMeta) {
-  if (!input || !input.id) {
-    throw new Error("Scheme record id is required");
-  }
-
-  var existing = listRows_(SHEETS.SCHEME_DATA).find(function (item) {
-    return String(item.id) === String(input.id);
-  });
-  if (!existing) {
-    throw new Error("Scheme record not found: " + input.id);
-  }
-
-  assertSchemeWriteAllowed_(requestMeta, existing.block, false);
-  var row = normalizeSchemeDataInput_(input);
-  assertSchemeWriteAllowed_(requestMeta, row.block, false);
-  row.id = String(input.id);
-  row.createdAt = existing.createdAt || input.createdAt || new Date().toISOString();
-  row.updatedAt = new Date().toISOString();
-  row.createdBy = existing.createdBy || normalizeEmail_(requestMeta && requestMeta.email);
-  upsertRowById_(SHEETS.SCHEME_DATA, row);
-  return row;
-}
-
-function deleteSchemeData_(id, requestMeta) {
-  assertSchemeWriteAllowed_(requestMeta, "", true);
-  return deleteRowById_(SHEETS.SCHEME_DATA, id);
-}
-
-function bulkUpsertSchemeData_(records, requestMeta) {
-  if (!Array.isArray(records) || !records.length) {
-    throw new Error("Upload contains no scheme records");
-  }
-
-  var rows = records.map(function (input) {
-    var row = normalizeSchemeDataInput_(input);
-    assertSchemeWriteAllowed_(requestMeta, row.block, false);
-    return row;
-  });
-
-  var saved = rows.map(function (row, index) {
-    row.id = row.id || ("SCH-" + new Date().getTime() + "-" + index);
-    row.createdAt = row.createdAt || new Date().toISOString();
-    row.updatedAt = new Date().toISOString();
-    row.createdBy = row.createdBy || normalizeEmail_(requestMeta && requestMeta.email);
-    upsertRowById_(SHEETS.SCHEME_DATA, row);
-    return row;
-  });
-
-  return { saved: saved.length, records: saved };
-}
-
-function normalizeSchemeDataInput_(input) {
-  if (!input || !input.financialYear || !input.schemeName || !input.block || !input.village) {
-    throw new Error("Financial year, scheme name, block and village are required");
-  }
-
-  var row = {
-    financialYear: String(input.financialYear).trim(),
-    schemeName: String(input.schemeName).trim(),
-    block: String(input.block).trim(),
-    village: String(input.village).trim(),
-    target: Number(input.target || 0),
-    approvedCases: Number(input.approvedCases || 0),
-    distributedUnits: Number(input.distributedUnits || 0),
-    pendingCases: Number(input.pendingCases || 0),
-    financialProgressAmount: Number(input.financialProgressAmount || 0),
-    physicalProgressPercentage: Number(input.physicalProgressPercentage || 0),
-    remarks: String(input.remarks || "").trim()
-  };
-
-  var numericKeys = ["target", "approvedCases", "distributedUnits", "pendingCases", "financialProgressAmount", "physicalProgressPercentage"];
-  numericKeys.forEach(function (key) {
-    if (!isFinite(row[key]) || row[key] < 0) {
-      throw new Error(key + " must be a non-negative number");
-    }
-  });
-  if (row.physicalProgressPercentage > 100) {
-    throw new Error("Physical progress percentage cannot exceed 100");
-  }
-  if (row.approvedCases > row.target || row.distributedUnits > row.approvedCases) {
-    throw new Error("Approved cases and distributed units cannot exceed their preceding totals");
-  }
-
-  return row;
-}
-
-function assertSchemeWriteAllowed_(requestMeta, block, isDelete) {
-  var email = normalizeEmail_(requestMeta && requestMeta.email);
-  var user = listUsers_().find(function (item) {
-    return normalizeEmail_(item.email) === email;
-  });
-  if (!user || !toBool_(user.active)) {
-    throw new Error("Active login session is required");
-  }
-
-  var role = normalizeRole_(user.role);
-  if (role === "admin") {
-    return;
-  }
-  if (isDelete) {
-    throw new Error("Only district admin can delete scheme records");
-  }
-  if (role === "data_entry_operator") {
-    return;
-  }
-  if (role === "block_officer" || role === "field_officer") {
-    var region = String(user.region || "").trim().toLowerCase();
-    var targetBlock = String(block || "").trim().toLowerCase();
-    if (region && targetBlock && (region.indexOf(targetBlock) >= 0 || targetBlock.indexOf(region) >= 0)) {
-      return;
-    }
-    throw new Error("Block officers can only update records for their assigned block");
-  }
-
-  throw new Error("This role has view-only access to scheme data");
-}
-
-function listSchemeBeneficiaries_(requestMeta) {
-  var rows = listRows_(SHEETS.SCHEME_BENEFICIARIES);
-  if (getRequesterRole_(requestMeta) === "admin") {
-    return rows;
-  }
-  return rows.map(function (row) {
-    row.aadhaarNumber = maskSensitive_(row.aadhaarNumber, 4);
-    row.bankAccountNumber = maskSensitive_(row.bankAccountNumber, 4);
-    return row;
-  });
-}
-
-function createSchemeBeneficiary_(input, requestMeta) {
-  var row = normalizeSchemeBeneficiaryInput_(input);
-  assertSchemeWriteAllowed_(requestMeta, row.block, false);
-  row.id = input.id || ("BEN-" + new Date().getTime());
-  row.createdAt = input.createdAt || new Date().toISOString();
-  row.updatedAt = new Date().toISOString();
-  row.createdBy = normalizeEmail_(requestMeta && requestMeta.email);
-  attachDistributionPhoto_(row, input);
-  upsertRowById_(SHEETS.SCHEME_BENEFICIARIES, row);
-  return maskSchemeBeneficiaryForRequester_(row, requestMeta);
-}
-
-function updateSchemeBeneficiary_(input, requestMeta) {
-  if (!input || !input.id) {
-    throw new Error("Beneficiary record id is required");
-  }
-  var existing = listRows_(SHEETS.SCHEME_BENEFICIARIES).find(function (item) {
-    return String(item.id) === String(input.id);
-  });
-  if (!existing) {
-    throw new Error("Beneficiary record not found: " + input.id);
-  }
-
-  assertSchemeWriteAllowed_(requestMeta, existing.block, false);
-  var row = normalizeSchemeBeneficiaryInput_(input);
-  assertSchemeWriteAllowed_(requestMeta, row.block, false);
-  row.id = String(input.id);
-  row.aadhaarNumber = isMasked_(row.aadhaarNumber) ? existing.aadhaarNumber : row.aadhaarNumber;
-  row.bankAccountNumber = isMasked_(row.bankAccountNumber) ? existing.bankAccountNumber : row.bankAccountNumber;
-  row.createdAt = existing.createdAt || input.createdAt || new Date().toISOString();
-  row.updatedAt = new Date().toISOString();
-  row.createdBy = existing.createdBy || normalizeEmail_(requestMeta && requestMeta.email);
-  row.distributionPhotoUrl = existing.distributionPhotoUrl || "";
-  row.distributionPhotoFileId = existing.distributionPhotoFileId || "";
-  attachDistributionPhoto_(row, input);
-  upsertRowById_(SHEETS.SCHEME_BENEFICIARIES, row);
-  return maskSchemeBeneficiaryForRequester_(row, requestMeta);
-}
-
-function deleteSchemeBeneficiary_(id, requestMeta) {
-  assertSchemeWriteAllowed_(requestMeta, "", true);
-  return deleteRowById_(SHEETS.SCHEME_BENEFICIARIES, id);
-}
-
-function bulkUpsertSchemeBeneficiaries_(records, requestMeta) {
-  if (!Array.isArray(records) || !records.length) {
-    throw new Error("Upload contains no beneficiary records");
-  }
-  var saved = records.map(function (input, index) {
-    var row = normalizeSchemeBeneficiaryInput_(input);
-    assertSchemeWriteAllowed_(requestMeta, row.block, false);
-    row.id = input.id || ("BEN-" + new Date().getTime() + "-" + index);
-    row.createdAt = input.createdAt || new Date().toISOString();
-    row.updatedAt = new Date().toISOString();
-    row.createdBy = normalizeEmail_(requestMeta && requestMeta.email);
-    row.distributionPhotoUrl = "";
-    row.distributionPhotoFileId = "";
-    upsertRowById_(SHEETS.SCHEME_BENEFICIARIES, row);
-    return maskSchemeBeneficiaryForRequester_(row, requestMeta);
-  });
-  return { saved: saved.length, records: saved };
-}
-
-function normalizeSchemeBeneficiaryInput_(input) {
-  if (!input || !input.beneficiaryName || !input.mobileNumber || !input.aadhaarNumber || !input.bankAccountNumber || !input.village || !input.block || !input.schemeName) {
-    throw new Error("Beneficiary name, mobile, Aadhaar, bank account, village, block and scheme are required");
-  }
-  var row = {
-    beneficiaryName: String(input.beneficiaryName).trim(),
-    fatherHusbandName: String(input.fatherHusbandName || "").trim(),
-    mobileNumber: String(input.mobileNumber).replace(/\D/g, ""),
-    aadhaarNumber: String(input.aadhaarNumber).replace(/\s/g, ""),
-    rationCardNumber: String(input.rationCardNumber || "").trim(),
-    bankAccountNumber: String(input.bankAccountNumber).replace(/\s/g, ""),
-    ifscCode: String(input.ifscCode || "").trim().toUpperCase(),
-    village: String(input.village).trim(),
-    gramPanchayat: String(input.gramPanchayat || "").trim(),
-    block: String(input.block).trim(),
-    category: String(input.category || "General").trim(),
-    womenBeneficiary: String(input.womenBeneficiary || "No").trim(),
-    pvtg: String(input.pvtg || "No").trim(),
-    fraBeneficiary: String(input.fraBeneficiary || "No").trim(),
-    schemeName: String(input.schemeName).trim(),
-    dateOfApproval: String(input.dateOfApproval || "").trim(),
-    dateOfDistribution: String(input.dateOfDistribution || "").trim(),
-    unitsDistributed: Number(input.unitsDistributed || 0),
-    remarks: String(input.remarks || "").trim()
-  };
-  if (!/^\d{10}$/.test(row.mobileNumber)) {
-    throw new Error("Mobile number must contain 10 digits");
-  }
-  if (!isMasked_(row.aadhaarNumber) && !/^\d{12}$/.test(row.aadhaarNumber)) {
-    throw new Error("Aadhaar number must contain 12 digits");
-  }
-  if (!isFinite(row.unitsDistributed) || row.unitsDistributed < 0) {
-    throw new Error("Units distributed must be a non-negative number");
-  }
-  return row;
-}
-
-function attachDistributionPhoto_(row, input) {
-  if (!input || !input.distributionPhotoDataUrl) {
-    return;
-  }
-  var image = savePhotoToDrive_(input.distributionPhotoDataUrl, input.distributionPhotoFileName || ("beneficiary-distribution-" + new Date().getTime() + ".jpg"));
-  row.distributionPhotoUrl = image.viewUrl || image.url;
-  row.distributionPhotoFileId = image.id;
-}
-
-function maskSchemeBeneficiaryForRequester_(row, requestMeta) {
-  if (getRequesterRole_(requestMeta) === "admin") {
-    return row;
-  }
-  var copy = Object.assign({}, row);
-  copy.aadhaarNumber = maskSensitive_(copy.aadhaarNumber, 4);
-  copy.bankAccountNumber = maskSensitive_(copy.bankAccountNumber, 4);
-  return copy;
-}
-
-function maskSensitive_(value, visibleDigits) {
-  var raw = String(value || "");
-  if (!raw || isMasked_(raw)) {
-    return raw;
-  }
-  var visible = Math.max(0, Number(visibleDigits || 0));
-  return new Array(Math.max(0, raw.length - visible) + 1).join("*") + raw.slice(-visible);
-}
-
-function isMasked_(value) {
-  return String(value || "").indexOf("*") >= 0;
-}
-
 function appendRow_(sheetName, data) {
   var sheet = getSheet_(sheetName);
   var headers = sheet.getDataRange().getValues()[0];
@@ -1514,6 +1300,337 @@ function appendRowWithHeaders_(sheetName, headers, data) {
     return data[normalized] !== undefined ? data[normalized] : "";
   });
   sheet.appendRow(row);
+}
+
+function createSchemeDataRecord_(input, requestMeta) {
+  var row = normalizeSchemeDataRecord_(input || {}, null, requestMeta);
+  appendRowWithHeaders_(SHEETS.SCHEME_DATA, DEFAULT_SHEET_HEADERS[SHEETS.SCHEME_DATA], row);
+  return row;
+}
+
+function updateSchemeDataRecord_(input, requestMeta) {
+  if (!input || !input.id) {
+    throw new Error("Invalid scheme data input");
+  }
+
+  var sheet = getSheet_(SHEETS.SCHEME_DATA);
+  var values = sheet.getDataRange().getValues();
+  if (!values || values.length < 2) {
+    throw new Error("Scheme record not found");
+  }
+
+  var headers = values[0];
+  var idIdx = findColumnIndex_(headers, "id");
+  var existing = null;
+
+  for (var i = 1; i < values.length; i++) {
+    if (String(values[i][idIdx]) === String(input.id)) {
+      existing = rowFromValues_(headers, values[i]);
+      break;
+    }
+  }
+
+  if (!existing) {
+    throw new Error("Scheme record not found");
+  }
+
+  var row = normalizeSchemeDataRecord_(input, existing, requestMeta);
+  row.id = String(existing.id || input.id);
+  row.createdAt = existing.createdAt || row.createdAt;
+  row.createdBy = existing.createdBy || row.createdBy;
+  row.updatedAt = new Date().toISOString();
+  upsertRowById_(SHEETS.SCHEME_DATA, row);
+  return row;
+}
+
+function bulkUpsertSchemeDataRecords_(records, requestMeta) {
+  var list = Array.isArray(records) ? records : [];
+  if (!list.length) {
+    throw new Error("Upload contains no scheme records");
+  }
+
+  var saved = 0;
+  var resultRows = [];
+  list.forEach(function (item) {
+    var row = upsertSchemeDataByNaturalKey_(item, requestMeta);
+    resultRows.push(row);
+    saved += 1;
+  });
+
+  return { saved: saved, records: resultRows };
+}
+
+function createSchemeBeneficiaryRecord_(input, requestMeta) {
+  var row = normalizeSchemeBeneficiaryRecord_(input || {}, null, requestMeta);
+  appendRowWithHeaders_(SHEETS.SCHEME_BENEFICIARIES, DEFAULT_SHEET_HEADERS[SHEETS.SCHEME_BENEFICIARIES], row);
+  return row;
+}
+
+function updateSchemeBeneficiaryRecord_(input, requestMeta) {
+  if (!input || !input.id) {
+    throw new Error("Invalid beneficiary input");
+  }
+
+  var sheet = getSheet_(SHEETS.SCHEME_BENEFICIARIES);
+  var values = sheet.getDataRange().getValues();
+  if (!values || values.length < 2) {
+    throw new Error("Beneficiary record not found");
+  }
+
+  var headers = values[0];
+  var idIdx = findColumnIndex_(headers, "id");
+  var existing = null;
+
+  for (var i = 1; i < values.length; i++) {
+    if (String(values[i][idIdx]) === String(input.id)) {
+      existing = rowFromValues_(headers, values[i]);
+      break;
+    }
+  }
+
+  if (!existing) {
+    throw new Error("Beneficiary record not found");
+  }
+
+  var row = normalizeSchemeBeneficiaryRecord_(input, existing, requestMeta);
+  row.id = String(existing.id || input.id);
+  row.createdAt = existing.createdAt || row.createdAt;
+  row.createdBy = existing.createdBy || row.createdBy;
+  row.updatedAt = new Date().toISOString();
+  upsertRowById_(SHEETS.SCHEME_BENEFICIARIES, row);
+  return row;
+}
+
+function bulkUpsertSchemeBeneficiaryRecords_(records, requestMeta) {
+  var list = Array.isArray(records) ? records : [];
+  if (!list.length) {
+    throw new Error("Upload contains no beneficiary records");
+  }
+
+  var saved = 0;
+  var resultRows = [];
+  list.forEach(function (item) {
+    var row = upsertSchemeBeneficiaryByNaturalKey_(item, requestMeta);
+    resultRows.push(row);
+    saved += 1;
+  });
+
+  return { saved: saved, records: resultRows };
+}
+
+function upsertSchemeDataByNaturalKey_(input, requestMeta) {
+  var sheet = getSheet_(SHEETS.SCHEME_DATA);
+  var values = sheet.getDataRange().getValues();
+  var existing = findSchemeDataRecord_(values, input);
+  var row = normalizeSchemeDataRecord_(input || {}, existing, requestMeta);
+
+  if (existing) {
+    row.id = String(existing.id || row.id);
+    row.createdAt = existing.createdAt || row.createdAt;
+    row.createdBy = existing.createdBy || row.createdBy;
+    row.updatedAt = new Date().toISOString();
+  }
+
+  upsertRowById_(SHEETS.SCHEME_DATA, row);
+  return row;
+}
+
+function upsertSchemeBeneficiaryByNaturalKey_(input, requestMeta) {
+  var sheet = getSheet_(SHEETS.SCHEME_BENEFICIARIES);
+  var values = sheet.getDataRange().getValues();
+  var existing = findSchemeBeneficiaryRecord_(values, input);
+  var row = normalizeSchemeBeneficiaryRecord_(input || {}, existing, requestMeta);
+
+  if (existing) {
+    row.id = String(existing.id || row.id);
+    row.createdAt = existing.createdAt || row.createdAt;
+    row.createdBy = existing.createdBy || row.createdBy;
+    row.updatedAt = new Date().toISOString();
+  }
+
+  upsertRowById_(SHEETS.SCHEME_BENEFICIARIES, row);
+  return row;
+}
+
+function normalizeSchemeDataRecord_(input, existing, requestMeta) {
+  var effectiveTarget = toNonNegativeNumber_(input.target !== undefined ? input.target : (existing && existing.target) || 0, "Target must be a non-negative number");
+  var effectiveApproved = toNonNegativeNumber_(input.approvedCases !== undefined ? input.approvedCases : (existing && existing.approvedCases) || 0, "Approved cases must be a non-negative number");
+  var effectiveDistributed = toNonNegativeNumber_(input.distributedUnits !== undefined ? input.distributedUnits : (existing && existing.distributedUnits) || 0, "Distributed units must be a non-negative number");
+  if (effectiveTarget < effectiveApproved) {
+    throw new Error("Target must be greater than or equal to approved cases");
+  }
+  if (effectiveApproved < effectiveDistributed) {
+    throw new Error("Approved cases must be greater than or equal to distributed units");
+  }
+
+  var calculatedPending = Math.max(effectiveApproved - effectiveDistributed, 0);
+  var calculatedPhysical = calculatePhysicalProgress_(effectiveTarget, effectiveDistributed);
+
+  if (input.pendingCases !== undefined && toNonNegativeNumber_(input.pendingCases, "Pending cases must be a non-negative number") !== calculatedPending) {
+    throw new Error("Pending cases must equal approved cases minus distributed units");
+  }
+  if (input.physicalProgressPercentage !== undefined && toNonNegativeNumber_(input.physicalProgressPercentage, "Physical progress percentage must be a non-negative number") !== calculatedPhysical) {
+    throw new Error("Physical progress percentage must equal distributed units divided by target");
+  }
+
+  return {
+    id: String(input.id || (existing && existing.id) || ("SCH-" + new Date().getTime())),
+    financialYear: String(input.financialYear || (existing && existing.financialYear) || "").trim(),
+    schemeName: String(input.schemeName || (existing && existing.schemeName) || "").trim(),
+    block: String(input.block || (existing && existing.block) || "").trim(),
+    village: String(input.village || (existing && existing.village) || "").trim(),
+    target: effectiveTarget,
+    approvedCases: effectiveApproved,
+    distributedUnits: effectiveDistributed,
+    pendingCases: calculatedPending,
+    financialProgressAmount: Number(input.financialProgressAmount !== undefined ? input.financialProgressAmount : (existing && existing.financialProgressAmount) || 0),
+    physicalProgressPercentage: calculatedPhysical,
+    remarks: String(input.remarks || (existing && existing.remarks) || ""),
+    createdAt: String(input.createdAt || (existing && existing.createdAt) || new Date().toISOString()),
+    updatedAt: String(input.updatedAt || new Date().toISOString()),
+    createdBy: String(input.createdBy || (existing && existing.createdBy) || (requestMeta && requestMeta.email) || "")
+  };
+}
+
+function toNonNegativeNumber_(value, errorMessage) {
+  var number = Number(value);
+  if (!isFinite(number) || number < 0) {
+    throw new Error(errorMessage || "Expected a non-negative number");
+  }
+  return number;
+}
+
+function calculatePhysicalProgress_(target, distributedUnits) {
+  var safeTarget = Number(target || 0);
+  if (!safeTarget) {
+    return 0;
+  }
+  return Math.round((Number(distributedUnits || 0) / safeTarget) * 100);
+}
+
+function normalizeSchemeBeneficiaryRecord_(input, existing, requestMeta) {
+  var photo = resolveDistributionPhoto_(input, existing);
+  return {
+    id: String(input.id || (existing && existing.id) || ("BEN-" + new Date().getTime())),
+    beneficiaryName: String(input.beneficiaryName || (existing && existing.beneficiaryName) || "").trim(),
+    fatherHusbandName: String(input.fatherHusbandName || (existing && existing.fatherHusbandName) || "").trim(),
+    mobileNumber: String(input.mobileNumber || (existing && existing.mobileNumber) || "").trim(),
+    aadhaarNumber: String(input.aadhaarNumber || (existing && existing.aadhaarNumber) || "").trim(),
+    rationCardNumber: String(input.rationCardNumber || (existing && existing.rationCardNumber) || "").trim(),
+    bankAccountNumber: String(input.bankAccountNumber || (existing && existing.bankAccountNumber) || "").trim(),
+    ifscCode: String(input.ifscCode || (existing && existing.ifscCode) || "").trim(),
+    village: String(input.village || (existing && existing.village) || "").trim(),
+    gramPanchayat: String(input.gramPanchayat || (existing && existing.gramPanchayat) || "").trim(),
+    block: String(input.block || (existing && existing.block) || "").trim(),
+    category: normalizeBeneficiaryCategory_(input.category || (existing && existing.category) || "General"),
+    womenBeneficiary: normalizeYesNo_(input.womenBeneficiary || (existing && existing.womenBeneficiary) || "No"),
+    pvtg: normalizeYesNo_(input.pvtg || (existing && existing.pvtg) || "No"),
+    fraBeneficiary: normalizeYesNo_(input.fraBeneficiary || (existing && existing.fraBeneficiary) || "No"),
+    schemeName: String(input.schemeName || (existing && existing.schemeName) || "").trim(),
+    dateOfApproval: String(input.dateOfApproval || (existing && existing.dateOfApproval) || "").trim(),
+    dateOfDistribution: String(input.dateOfDistribution || (existing && existing.dateOfDistribution) || "").trim(),
+    unitsDistributed: Number(input.unitsDistributed !== undefined ? input.unitsDistributed : (existing && existing.unitsDistributed) || 0),
+    distributionPhotoUrl: photo.url,
+    distributionPhotoFileId: photo.fileId,
+    remarks: String(input.remarks || (existing && existing.remarks) || ""),
+    createdAt: String(input.createdAt || (existing && existing.createdAt) || new Date().toISOString()),
+    updatedAt: String(input.updatedAt || new Date().toISOString()),
+    createdBy: String(input.createdBy || (existing && existing.createdBy) || (requestMeta && requestMeta.email) || "")
+  };
+}
+
+function resolveDistributionPhoto_(input, existing) {
+  if (input && input.distributionPhotoDataUrl) {
+    var image = savePhotoToDrive_(input.distributionPhotoDataUrl, input.distributionPhotoFileName || ("scheme-beneficiary-" + new Date().getTime() + ".jpg"));
+    return { url: image.viewUrl || image.url, fileId: image.id };
+  }
+
+  if (existing) {
+    return {
+      url: String(existing.distributionPhotoUrl || ""),
+      fileId: String(existing.distributionPhotoFileId || "")
+    };
+  }
+
+  return { url: "", fileId: "" };
+}
+
+function normalizeBeneficiaryCategory_(value) {
+  var category = String(value || "General").trim();
+  if (category === "OBC" || category === "SC" || category === "ST") {
+    return category;
+  }
+  return "General";
+}
+
+function normalizeYesNo_(value) {
+  return String(value || "No").trim().toLowerCase() === "yes" ? "Yes" : "No";
+}
+
+function findSchemeDataRecord_(values, input) {
+  if (!values || values.length < 2 || !input) {
+    return null;
+  }
+
+  var headers = values[0];
+  var idIdx = findColumnIndex_(headers, "id");
+  var targetId = String(input.id || "");
+  var key = makeSchemeDataKey_(input);
+
+  for (var i = 1; i < values.length; i++) {
+    var candidate = rowFromValues_(headers, values[i]);
+    if (targetId && String(values[i][idIdx]) === targetId) {
+      return candidate;
+    }
+    if (makeSchemeDataKey_(candidate) === key) {
+      return candidate;
+    }
+  }
+
+  return null;
+}
+
+function findSchemeBeneficiaryRecord_(values, input) {
+  if (!values || values.length < 2 || !input) {
+    return null;
+  }
+
+  var headers = values[0];
+  var idIdx = findColumnIndex_(headers, "id");
+  var targetId = String(input.id || "");
+  var key = makeSchemeBeneficiaryKey_(input);
+
+  for (var i = 1; i < values.length; i++) {
+    var candidate = rowFromValues_(headers, values[i]);
+    if (targetId && String(values[i][idIdx]) === targetId) {
+      return candidate;
+    }
+    if (makeSchemeBeneficiaryKey_(candidate) === key) {
+      return candidate;
+    }
+  }
+
+  return null;
+}
+
+function makeSchemeDataKey_(input) {
+  return [input && input.financialYear, input && input.schemeName, input && input.block, input && input.village].map(function (value) {
+    return String(value || "").trim().toLowerCase();
+  }).join("|");
+}
+
+function makeSchemeBeneficiaryKey_(input) {
+  return [input && input.mobileNumber, input && input.aadhaarNumber, input && input.schemeName, input && input.village, input && input.block].map(function (value) {
+    return String(value || "").trim().toLowerCase();
+  }).join("|");
+}
+
+function rowFromValues_(headers, values) {
+  var row = {};
+  headers.forEach(function (header, idx) {
+    row[normalizeKey_(header)] = values[idx];
+  });
+  return row;
 }
 
 function listUsers_() {
@@ -1637,16 +1754,10 @@ function normalizeRole_(role) {
   if (value === "departmental_officer" || value === "departmental officer") {
     return "departmental_officer";
   }
-  if (value === "block_officer" || value === "block officer") {
-    return "block_officer";
-  }
-  if (value === "data_entry" || value === "data_entry_operator" || value === "data entry operator") {
-    return "data_entry_operator";
-  }
   if (value === "deputy_director_vet" || value === "deputy director vet") {
     return "deputy_director_vet";
   }
-  if (value === "field_officer" || value === "field officer") {
+  if (value === "data_entry" || value === "data_entry_operator" || value === "field_officer" || value === "field officer") {
     return "field_officer";
   }
   return "field_officer";
