@@ -59,10 +59,10 @@ export default function PublicHomePage() {
     refetchOnWindowFocus: true,
   });
 
-  const schemeRecords = landingData?.schemeRecords || [];
-  const beneficiaryRecords = landingData?.beneficiaryRecords || [];
-  const institutes = landingData?.institutes || [];
-  const locations = landingData?.locations || [];
+  const schemeRecords = useMemo(() => landingData?.schemeRecords || [], [landingData?.schemeRecords]);
+  const beneficiaryRecords = useMemo(() => landingData?.beneficiaryRecords || [], [landingData?.beneficiaryRecords]);
+  const institutes = useMemo(() => landingData?.institutes || [], [landingData?.institutes]);
+  const locations = useMemo(() => landingData?.locations || [], [landingData?.locations]);
   const portalSettings = landingData?.portalSettings;
 
   const linkedSchemeRecords = useMemo(() => linkSchemeRecords(schemeRecords, beneficiaryRecords), [beneficiaryRecords, schemeRecords]);
@@ -198,7 +198,7 @@ export default function PublicHomePage() {
       description: "Public preview generated from the live dashboard data currently loaded on this page.",
       metrics: [],
     };
-  }, [beneficiaryRecords, blockMetrics, liveTotals.activeInstitutes, liveTotals.approvedCases, liveTotals.distributedUnits, liveTotals.pendingCases, liveTotals.target, liveTotals.totalBeneficiaries, liveTotals.totalSchemes, portalSettings?.reportOne, portalSettings?.reportThree, portalSettings?.reportTwo, schemeRecords.length, selectedReport]);
+  }, [blockMetrics, liveTotals.activeInstitutes, liveTotals.approvedCases, liveTotals.distributedUnits, liveTotals.pendingCases, liveTotals.target, liveTotals.totalBeneficiaries, liveTotals.totalSchemes, portalSettings?.reportOne, portalSettings?.reportThree, portalSettings?.reportTwo, schemeRecords.length, selectedReport]);
 
   const schemeChartRows = useMemo(() => schemeFlowCards.slice(0, 6).map((scheme) => ({ name: scheme.schemeName, target: scheme.target, achievement: scheme.distributedUnits, progress: scheme.progress })), [schemeFlowCards]);
 

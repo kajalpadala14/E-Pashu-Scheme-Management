@@ -639,7 +639,7 @@ function SchemeRecordForm({ form, setForm, institutes, schemeNames, submitted }:
       )}
     </FormField>
     <FormField label="Target" required><NumberInput value={form.target} onChange={(value) => set("target", value)} /></FormField>
-    <FormField label="Achievement" required><NumberInput value={form.distributedUnits} onChange={(value) => { set("distributedUnits", value); set("approvedCases", value); }} /></FormField>
+    <FormField label="Achievement"><NumberInput value={form.distributedUnits} onChange={(value) => { set("distributedUnits", value); set("approvedCases", value); }} /></FormField>
     <FormField label="SC Count"><NumberInput value={form.scCount} onChange={(value) => set("scCount", value)} /></FormField>
     <FormField label="ST Count"><NumberInput value={form.stCount} onChange={(value) => set("stCount", value)} /></FormField>
     <FormField label="OBC Count"><NumberInput value={form.obcCount} onChange={(value) => set("obcCount", value)} /></FormField>
