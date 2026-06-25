@@ -132,12 +132,8 @@ export default function SchemesPage() {
   const schemeNames = useMemo(() => collectSchemeNames(records, beneficiaryRecords), [beneficiaryRecords, records]);
 
   const canAdd = Boolean(user);
-  const canDelete = user?.role === "admin";
-  const canEdit = (record: SchemeDataRecord) => {
-    if (user?.role === "admin" || user?.role === "district_officer" || user?.role === "data_entry_operator") return true;
-    if (user?.role !== "block_officer" && user?.role !== "field_officer") return false;
-    return matchesBlock(user.region, record.block);
-  };
+  const canDelete = Boolean(user);
+  const canEdit = () => Boolean(user);
 
   const options = useMemo(() => ({
     years: unique(records.map((item) => item.financialYear)),

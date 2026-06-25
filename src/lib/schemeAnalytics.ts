@@ -9,18 +9,24 @@ function normalizeContext(value: string) {
 }
 
 function normalizeBlockLabel(value: string) {
-  const token = normalizeSchemeToken(value);
+  const token = normalizeContext(value);
   if (!token) {
     return "";
   }
 
-  if (token === "kuakonda" || token === "kuwakonda") return "Kuwakonda";
-  if (token === "katekalyan" || token === "katekalyan block") return "Katekalyan";
-  if (token === "chhindgarh" || token === "chhindgarh block") return "Chhindgarh";
+  if (token === "kuakonda" || token === "kuwakonda") return "Kuakonda";
+  if (token === "katekalyan" || token === "katekalyanblock") return "Katekalyan";
+  if (token === "chhindgarh" || token === "chhindgarhblock") return "Chhindgarh";
   if (token === "geedam") return "Geedam";
   if (token === "dantewada") return "Dantewada";
 
   return value.trim();
+}
+
+function sameBlock(left: string, right: string) {
+  const leftBlock = normalizeContext(normalizeBlockLabel(left));
+  const rightBlock = normalizeContext(normalizeBlockLabel(right));
+  return !!leftBlock && !!rightBlock && leftBlock === rightBlock;
 }
 
 function matchesInstituteContext(record: SchemeDataRecord, beneficiary: SchemeBeneficiaryRecord) {
@@ -35,12 +41,55 @@ function matchesSchemeRecord(record: SchemeDataRecord, beneficiary: SchemeBenefi
     return false;
   }
 
-  const sameBlock = normalizeSchemeToken(record.block) === normalizeSchemeToken(beneficiary.block);
-  if (sameBlock) {
+  if (sameBlock(record.block, beneficiary.block)) {
     return true;
   }
 
   return matchesInstituteContext(record, beneficiary);
+}
+
+function getSchemeInstituteName(record: SchemeDataRecord) {
+  return String(record.instituteName || record.village || "").trim();
+}
+
+function getBeneficiaryInstituteName(record: SchemeBeneficiaryRecord) {
+  return String(record.village || record.gramPanchayat || "").trim();
+}
+
+function collectActiveInstituteKeys(
+  schemeRecords: SchemeDataRecord[],
+  beneficiaryRecords: SchemeBeneficiaryRecord[],
+  institutes: Array<{ instituteName?: string; status?: string; block?: string }>,
+) {
+  const keys = new Set<string>();
+
+  institutes
+    .filter((item) => String(item.status || "Active") !== "Inactive")
+    .forEach((item) => {
+      const block = normalizeBlockLabel(String(item.block || ""));
+      const instituteName = String(item.instituteName || "").trim();
+      if (block && instituteName) {
+        keys.add(`${normalizeContext(block)}|${normalizeContext(instituteName)}`);
+      }
+    });
+
+  schemeRecords.forEach((record) => {
+    const block = normalizeBlockLabel(record.block);
+    const instituteName = getSchemeInstituteName(record);
+    if (block && instituteName) {
+      keys.add(`${normalizeContext(block)}|${normalizeContext(instituteName)}`);
+    }
+  });
+
+  beneficiaryRecords.forEach((record) => {
+    const block = normalizeBlockLabel(record.block);
+    const instituteName = getBeneficiaryInstituteName(record);
+    if (block && instituteName) {
+      keys.add(`${normalizeContext(block)}|${normalizeContext(instituteName)}`);
+    }
+  });
+
+  return keys;
 }
 
 export function collectSchemeNames(...sources: Array<Array<{ schemeName?: string }>>) {
@@ -90,13 +139,17 @@ export function buildSchemeSummaryTotals(
 ) {
   const linkedRecords = linkSchemeRecords(schemeRecords, beneficiaryRecords);
   const recordBlocks = new Set(
-    linkedRecords
-      .map((item) => item.block)
+    [
+      ...linkedRecords.map((item) => item.block),
+      ...beneficiaryRecords.map((item) => item.block),
+      ...institutes.map((item) => String(item.block || "")),
+      ..._locations.map((item) => item.block),
+    ]
       .map((item) => normalizeBlockLabel(String(item || "")))
       .filter(Boolean),
   );
   const activeBlocks = recordBlocks.size;
-  const activeInstitutes = institutes.filter((item) => String(item.status || "Active") !== "Inactive").length;
+  const activeInstitutes = collectActiveInstituteKeys(schemeRecords, beneficiaryRecords, institutes).size;
 
   return {
     totalSchemeRecords: schemeRecords.length,

@@ -1072,7 +1072,15 @@ export async function updateSchemeBeneficiaryRecord(input: SchemeBeneficiaryReco
 }
 
 export async function deleteSchemeBeneficiaryRecord(id: string): Promise<{ id: string; deleted: boolean }> {
-  return callAppsScript<{ id: string; deleted: boolean }>("schemeBeneficiaries.delete", { id });
+  try {
+    return await callAppsScript<{ id: string; deleted: boolean }>("schemeBeneficiaries.delete", { id });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error || "");
+    if (!message.toLowerCase().includes("unsupported action")) {
+      throw error;
+    }
+    return callAppsScript<{ id: string; deleted: boolean }>("schemeBeneficiary.delete", { id });
+  }
 }
 
 export async function bulkUpsertSchemeBeneficiaryRecords(records: Array<Partial<SchemeBeneficiaryRecord>>): Promise<{ saved: number; records: SchemeBeneficiaryRecord[] }> {
