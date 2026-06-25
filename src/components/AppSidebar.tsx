@@ -1,20 +1,18 @@
 import {
-  LayoutDashboard,
-  PawPrint,
-  Users,
-  Syringe,
-  Dna,
-  Bell,
-  UserCheck,
   BarChart3,
-  Stethoscope,
-  ShoppingBag,
+  Building2,
+  FileText,
+  LayoutDashboard,
   MapPinned,
+  Settings,
+  ShoppingBag,
+  UserCog,
+  Users,
 } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import { useLocation } from "react-router-dom";
-import { sessionRoleLabels, useUser } from "@/contexts/UserContext";
-import { FEATURES } from "@/lib/features";
+import { useUser } from "@/contexts/useUser";
+import { sessionRoleLabels } from "@/contexts/userSession";
 import { hasRouteAccess, type AppRouteKey } from "@/lib/rbac";
 import {
   Sidebar,
@@ -29,21 +27,18 @@ import {
 } from "@/components/ui/sidebar";
 
 const mainItems = [
-  { title: "Dashboard", url: "/", icon: LayoutDashboard, route: "dashboard" as AppRouteKey, enabled: FEATURES.ENABLE_DASHBOARD },
-  { title: "Animals", url: "/animals", icon: PawPrint, route: "animals" as AppRouteKey, enabled: true },
-  { title: "Farmers", url: "/farmers", icon: Users, route: "farmers" as AppRouteKey, enabled: true },
-  { title: "Employees", url: "/employees", icon: Users, route: "employees" as AppRouteKey, enabled: true },
-  { title: "Location Master", url: "/locations", icon: MapPinned, route: "locations" as AppRouteKey, enabled: true },
-  { title: "Schemes", url: "/schemes", icon: ShoppingBag, route: "schemes" as AppRouteKey, enabled: true },
-  { title: "Vaccinations", url: "/vaccinations", icon: Syringe, route: "vaccinations" as AppRouteKey, enabled: true },
-  { title: "Disease Care", url: "/ai-insights", icon: Stethoscope, route: "ai_insights" as AppRouteKey, enabled: true },
-  { title: "Breeding", url: "/breeding", icon: Dna, route: "breeding" as AppRouteKey, enabled: true },
+  { title: "Dashboard", url: "/dashboard", icon: LayoutDashboard, route: "dashboard" as AppRouteKey, enabled: true },
+  { title: "Scheme Management", url: "/schemes", icon: ShoppingBag, route: "schemes" as AppRouteKey, enabled: true },
+  { title: "Beneficiary Management", url: "/beneficiaries", icon: Users, route: "beneficiaries" as AppRouteKey, enabled: true },
+  { title: "Block Management", url: "/blocks", icon: Building2, route: "blocks" as AppRouteKey, enabled: true },
+  { title: "Institute Management", url: "/institutes", icon: MapPinned, route: "institutes" as AppRouteKey, enabled: true },
+  { title: "Reports & Analytics", url: "/reports", icon: BarChart3, route: "reports" as AppRouteKey, enabled: true },
 ];
 
 const systemItems = [
-  { title: "Alerts", url: "/alerts", icon: Bell, route: "alerts" as AppRouteKey, enabled: true },
-  { title: "Field Officers", url: "/field-officers", icon: UserCheck, route: "field_officers" as AppRouteKey, enabled: FEATURES.ENABLE_LIVE_MONITORING },
-  { title: "Reports", url: "/reports", icon: BarChart3, route: "reports" as AppRouteKey, enabled: true },
+  { title: "User Management", url: "/users", icon: UserCog, route: "users" as AppRouteKey, enabled: true },
+  { title: "Settings", url: "/settings", icon: Settings, route: "settings" as AppRouteKey, enabled: true },
+  { title: "Profile", url: "/profile", icon: FileText, route: "profile" as AppRouteKey, enabled: true },
 ];
 
 export function AppSidebar() {
@@ -68,7 +63,7 @@ export function AppSidebar() {
           {!collapsed && (
             <div className="min-w-0">
               <span className="block font-semibold text-sm text-sidebar-foreground">e-Pashu</span>
-              <span className="block truncate text-[11px] text-sidebar-foreground/70">{sessionRoleLabels[user.role]} · {user.region}</span>
+              <span className="block truncate text-[11px] text-sidebar-foreground/70">{sessionRoleLabels[user.role]} / {user.region}</span>
             </div>
           )}
         </div>

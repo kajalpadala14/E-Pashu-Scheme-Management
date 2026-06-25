@@ -1,10 +1,11 @@
-export type UserRole = "admin" | "veterinary_doctor" | "field_officer" | "block_officer" | "data_entry_operator" | "departmental_officer" | "deputy_director_vet";
+export type UserRole = "admin" | "district_officer" | "block_officer" | "data_entry_operator" | "veterinary_doctor" | "field_officer" | "departmental_officer" | "deputy_director_vet";
 
 export const ROLE_OPTIONS = [
   { value: "admin", label: "Admin" },
-  { value: "field_officer", label: "Field Officer" },
+  { value: "district_officer", label: "District Officer" },
   { value: "block_officer", label: "Block Officer" },
   { value: "data_entry_operator", label: "Data Entry Operator" },
+  { value: "field_officer", label: "Field Officer" },
   { value: "veterinary_doctor", label: "Veterinary Doctor" },
   { value: "departmental_officer", label: "Departmental Officer" },
   { value: "deputy_director_vet", label: "Deputy Director (Vet)" },
@@ -23,28 +24,40 @@ export type AppRouteKey =
   | "ai_insights"
   | "reports"
   | "schemes"
+  | "beneficiaries"
+  | "blocks"
+  | "institutes"
+  | "users"
+  | "settings"
   | "profile";
 
-const fullAccessRoles = new Set<UserRole>(["admin", "veterinary_doctor", "deputy_director_vet"]);
+const fullAccessRoles = new Set<UserRole>(["admin"]);
 
 const routePermissions: Record<AppRouteKey, UserRole[]> = {
-  dashboard: ["field_officer"],
+  dashboard: ["district_officer", "block_officer", "data_entry_operator", "veterinary_doctor", "field_officer", "departmental_officer", "deputy_director_vet"],
   animals: [],
   farmers: [],
-  locations: [],
+  locations: ["district_officer", "block_officer"],
   vaccinations: [],
   breeding: [],
   alerts: ["field_officer"],
   field_officers: ["field_officer"],
   employees: ["departmental_officer"],
   ai_insights: [],
-  reports: ["field_officer"],
-  schemes: ["field_officer", "block_officer", "data_entry_operator"],
-  profile: ["field_officer", "block_officer", "data_entry_operator"],
+  reports: ["district_officer", "block_officer", "data_entry_operator", "veterinary_doctor", "field_officer", "departmental_officer", "deputy_director_vet"],
+  schemes: ["district_officer", "block_officer", "data_entry_operator", "field_officer", "veterinary_doctor", "departmental_officer", "deputy_director_vet"],
+  beneficiaries: ["district_officer", "block_officer", "data_entry_operator", "field_officer", "veterinary_doctor", "departmental_officer", "deputy_director_vet"],
+  blocks: ["district_officer", "block_officer", "data_entry_operator", "departmental_officer", "deputy_director_vet"],
+  institutes: ["district_officer", "block_officer", "data_entry_operator", "field_officer", "veterinary_doctor", "departmental_officer", "deputy_director_vet"],
+  users: ["district_officer", "departmental_officer", "deputy_director_vet"],
+  settings: ["district_officer", "deputy_director_vet"],
+  profile: ["district_officer", "block_officer", "data_entry_operator", "field_officer", "veterinary_doctor", "departmental_officer", "deputy_director_vet"],
 };
 
 const legacyRoleMap: Record<string, UserRole> = {
   admin: "admin",
+  district_officer: "district_officer",
+  "district officer": "district_officer",
   veterinary: "veterinary_doctor",
   veterinary_doctor: "veterinary_doctor",
   "veterinary doctor": "veterinary_doctor",
@@ -82,7 +95,7 @@ export function hasRouteAccess(role: UserRole, route: AppRouteKey): boolean {
 
 export function getDefaultRouteForRole(role: UserRole): string {
   if (hasRouteAccess(role, "dashboard")) {
-    return "/";
+    return "/dashboard";
   }
   if (hasRouteAccess(role, "employees")) {
     return "/employees";
@@ -128,13 +141,3 @@ export function matchesUserRegion(
   return regionTokens.some((token) => areaTokens.some((value) => value.includes(token) || token.includes(value)));
 }
 
-// Sample role mapping used by admin access management and backend checks.
-export const SAMPLE_ROLE_MAPPING = {
-  admin: ["Full access", "User management", "Data governance"],
-  veterinary_doctor: ["Full access", "User management", "Reports"],
-  field_officer: ["Field module", "Emergency reports", "Own reports/evidence"],
-  block_officer: ["Scheme data", "Own block scheme updates", "Reports overview"],
-  data_entry_operator: ["Scheme data entry", "Scheme bulk upload", "Reports overview"],
-  departmental_officer: ["User management", "Reports overview"],
-  deputy_director_vet: ["Full access", "User approvals"],
-} as const;

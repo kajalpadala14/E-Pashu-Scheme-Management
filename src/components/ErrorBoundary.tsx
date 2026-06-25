@@ -1,9 +1,10 @@
 import React from "react";
 
 type State = { hasError: boolean; error?: Error };
+type Props = { children?: React.ReactNode };
 
-export class ErrorBoundary extends React.Component<React.PropsWithChildren<{}>, State> {
-  constructor(props: React.PropsWithChildren<{}>) {
+export class ErrorBoundary extends React.Component<Props, State> {
+  constructor(props: Props) {
     super(props);
     this.state = { hasError: false };
   }
@@ -31,7 +32,9 @@ export class ErrorBoundary extends React.Component<React.PropsWithChildren<{}>, 
               onClick={() => {
                 try {
                   window.localStorage.removeItem("e-pashu-session-user");
-                } catch {}
+                } catch (error) {
+                  void error;
+                }
                 window.location.href = window.location.origin + window.location.pathname + "#/login";
               }}
             >

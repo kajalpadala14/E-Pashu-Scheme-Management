@@ -12,6 +12,7 @@ import {
   type AdministrativeArea,
   type AdministrativeFilter,
 } from "@/lib/adminHierarchy";
+import { safeSelectOptions } from "@/lib/selectOptions";
 
 type AreaValue = AdministrativeArea | AdministrativeFilter;
 
@@ -49,14 +50,14 @@ export function AdminAreaSelect({
 }: AdminAreaSelectProps) {
   const isAll = value.district === "all";
   const area = isAll ? defaultAdministrativeArea : (value as AdministrativeArea);
-  const districtOptionsList = districtOptions && districtOptions.length ? districtOptions : getDistricts();
+  const districtOptionsList = safeSelectOptions(districtOptions && districtOptions.length ? districtOptions : getDistricts());
   const shouldUseManualEntry = allowManualEntry || districtOptionsList.length === 0;
-  const tehsils = tehsilOptions && tehsilOptions.length ? tehsilOptions : getTehsils(area.district);
-  const blocks = blockOptions && blockOptions.length ? blockOptions : getBlocks(area.district, area.tehsil);
-  const gramPanchayats = gramPanchayatOptions && gramPanchayatOptions.length ? gramPanchayatOptions : getGramPanchayats(area.district, area.tehsil, area.block);
-  const villages = villageOptions && villageOptions.length ? villageOptions : getVillages(area.district, area.tehsil, area.block, area.gramPanchayat);
+  const tehsils = safeSelectOptions(tehsilOptions && tehsilOptions.length ? tehsilOptions : getTehsils(area.district));
+  const blocks = safeSelectOptions(blockOptions && blockOptions.length ? blockOptions : getBlocks(area.district, area.tehsil));
+  const gramPanchayats = safeSelectOptions(gramPanchayatOptions && gramPanchayatOptions.length ? gramPanchayatOptions : getGramPanchayats(area.district, area.tehsil, area.block));
+  const villages = safeSelectOptions(villageOptions && villageOptions.length ? villageOptions : getVillages(area.district, area.tehsil, area.block, area.gramPanchayat));
   const resolveVillage = (district: string, tehsil: string, block: string, gramPanchayat: string) => {
-    const nextVillages = villageOptions && villageOptions.length ? villageOptions : getVillages(district, tehsil, block, gramPanchayat);
+    const nextVillages = safeSelectOptions(villageOptions && villageOptions.length ? villageOptions : getVillages(district, tehsil, block, gramPanchayat));
     return nextVillages[0] || gramPanchayat || "";
   };
 

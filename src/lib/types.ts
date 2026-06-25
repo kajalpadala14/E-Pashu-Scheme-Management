@@ -29,6 +29,8 @@ export interface BreedingRecord {
   inseminationDate: string;
   expectedCalving: string;
   status: string;
+  id?: string;
+  notes?: string;
 }
 
 export interface AlertItem {
@@ -65,6 +67,11 @@ export interface FieldOfficerTask {
   task: string;
   village: string;
   completed: boolean;
+  dueDate?: string;
+  date?: string;
+  officerId?: string;
+  status?: string;
+  target?: number;
 }
 
 export interface VaccinationTrend {
@@ -143,16 +150,35 @@ export interface LocationRecord {
   status: string;
 }
 
+export interface InstituteRecord {
+  id: string;
+  instituteName: string;
+  block: string;
+  instituteType: string;
+  status: "Active" | "Inactive";
+  createdAt: string;
+  updatedAt: string;
+  createdBy: string;
+}
+
 export interface SchemeDataRecord {
   id: string;
   financialYear: string;
   schemeName: string;
   block: string;
   village: string;
+  instituteId: string;
+  instituteName: string;
   target: number;
   approvedCases: number;
   distributedUnits: number;
   pendingCases: number;
+  scCount: number;
+  stCount: number;
+  obcCount: number;
+  generalCount: number;
+  otherCount: number;
+  totalBeneficiaries: number;
   financialProgressAmount: number;
   physicalProgressPercentage: number;
   remarks: string;
@@ -163,11 +189,15 @@ export interface SchemeDataRecord {
 
 export interface SchemeBeneficiaryRecord {
   id: string;
+  beneficiaryId: string;
   beneficiaryName: string;
   fatherHusbandName: string;
   mobileNumber: string;
   aadhaarNumber: string;
   rationCardNumber: string;
+  gender: "Male" | "Female" | "Other";
+  accountHolderName: string;
+  bankName: string;
   bankAccountNumber: string;
   ifscCode: string;
   village: string;
@@ -178,11 +208,16 @@ export interface SchemeBeneficiaryRecord {
   pvtg: "Yes" | "No";
   fraBeneficiary: "Yes" | "No";
   schemeName: string;
+  status: "Registered" | "Verification Pending" | "Verified" | "Approved" | "Rejected" | "Distributed" | "Completed";
+  verificationDate: string;
+  verificationOfficer: string;
+  verificationRemarks: string;
   dateOfApproval: string;
   dateOfDistribution: string;
   unitsDistributed: number;
   distributionPhotoUrl: string;
   distributionPhotoFileId: string;
+  distributionRemarks: string;
   remarks: string;
   createdAt: string;
   updatedAt: string;
@@ -292,7 +327,7 @@ export interface UserDirectoryRecord {
   id: string;
   name: string;
   email: string;
-  role: "admin" | "veterinary_doctor" | "field_officer" | "block_officer" | "data_entry_operator" | "departmental_officer" | "deputy_director_vet";
+  role: "admin" | "district_officer" | "veterinary_doctor" | "field_officer" | "block_officer" | "data_entry_operator" | "departmental_officer" | "deputy_director_vet";
   region: string;
   active: boolean;
   createdAt: string;
@@ -300,7 +335,18 @@ export interface UserDirectoryRecord {
 }
 
 // Backwards-compatible detailed record types used across pages
-export interface LivestockAnimal extends Partial<Record<string, any>> {
+export interface PortalSettingsRecord {
+  id?: string;
+  heroTitle: string;
+  heroSubtitle: string;
+  overviewLabel: string;
+  reportOne: string;
+  reportTwo: string;
+  reportThree: string;
+  updatedAt?: string;
+  updatedBy?: string;
+}
+export interface LivestockAnimal extends Partial<Record<string, unknown>> {
   id: string;
   earTag: string;
   qrCode: string;
@@ -330,7 +376,7 @@ export interface LivestockAnimal extends Partial<Record<string, any>> {
   productionData: string;
 }
 
-export interface FarmerRecord extends Partial<Record<string, any>> {
+export interface FarmerRecord extends Partial<Record<string, unknown>> {
   id: string;
   name: string;
   mobile: string;
@@ -366,4 +412,65 @@ export interface SupervisorVerification {
   photoApproved: boolean;
   reportApproved: boolean;
   fakeVisitFlag: boolean;
+}
+
+export type CampStatus = "Completed" | "Planned" | "Cancelled";
+export type CampType = "Awareness" | "Castration" | "Vaccination" | "Treatment";
+
+export interface AwarenessCamp {
+  id: string;
+  campDate: string;
+  location: string;
+  village: string;
+  resourcePerson: string;
+  topicCovered: string;
+  participantsCount: number;
+  documentsUrl: string[];
+  photosUrl: string[];
+  status: CampStatus;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CastrationCamp {
+  id: string;
+  campDate: string;
+  location: string;
+  village: string;
+  animalsCount: number;
+  animalType: string;
+  veterinaryOfficer: string;
+  remarks: string;
+  status: CampStatus;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface VaccinationCamp {
+  id: string;
+  campDate: string;
+  location: string;
+  vaccineName: string;
+  animalType: string;
+  numberVaccinated: number;
+  village: string;
+  veterinaryOfficer: string;
+  status: CampStatus;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface TreatmentCamp {
+  id: string;
+  campDate: string;
+  location: string;
+  village: string;
+  animalsTreated: number;
+  animalsDewormed: number;
+  diseaseDetails: string;
+  medicinesUsed: string[];
+  veterinaryOfficer: string;
+  status: CampStatus;
+  createdAt: string;
+  updatedAt: string;
 }

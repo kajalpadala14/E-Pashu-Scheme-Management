@@ -1,7 +1,9 @@
 # Google Apps Script Backend Setup
 
 ## 1) Create Spreadsheet
-Create one Google Sheet and add these tabs with exact headers in row 1:
+Create one Google Sheet. The script can auto-create the required tabs and headers, so manual tab creation is optional.
+
+If you want to create tabs manually, use these names:
 
 - `Animals`: `id,breed,age,owner,status`
 - `Farmers`: `name,phone,village,animals`
@@ -16,13 +18,7 @@ Create one Google Sheet and add these tabs with exact headers in row 1:
 - `HealthStatus`: `name,value,fill`
 - `MonthlyActivity`: `month,registered,vaccinated,alerts`
 
-Add your real data rows under each header (demo/mock is not used by frontend now).
-
-Add a `Locations` tab for the centralized area master with these headers in row 1:
-
-- `Locations`: `district,tehsil,block,gramPanchayat,village,status`
-
-The frontend uses this tab as the first source for district/block/panchayat/village dropdowns. If the tab is empty, older record-derived options still work as a fallback.
+Add your real data rows under each header. Demo/mock data is not used by the frontend.
 
 ## 2) Create Apps Script Project
 1. Open script.google.com.
@@ -32,6 +28,7 @@ The frontend uses this tab as the first source for district/block/panchayat/vill
 5. Add Script Property:
    - key: `SPREADSHEET_ID`
    - value: your Google Sheet ID
+6. In the Apps Script editor, run `setupEPashuBackend` once and approve permissions.
 
 ## 3) Deploy as Web App
 1. Click Deploy > New deployment.
@@ -39,6 +36,7 @@ The frontend uses this tab as the first source for district/block/panchayat/vill
 3. Execute as: `Me`.
 4. Who has access: `Anyone` (or your org users if frontend auth is added).
 5. Deploy and copy the web app URL.
+6. Open the web app URL in browser. It should return JSON with `"status":"connected"`.
 
 ## 4) Connect Frontend
 Create `.env` in project root and paste deployed web app URL in `VITE_GAS_WEB_APP_URL`:
@@ -46,6 +44,8 @@ Create `.env` in project root and paste deployed web app URL in `VITE_GAS_WEB_AP
 ```env
 VITE_GAS_WEB_APP_URL=https://script.google.com/macros/s/DEPLOYMENT_ID/exec
 ```
+
+The local `.env` file is already created in this project. Paste your deployed URL after `VITE_GAS_WEB_APP_URL=`.
 
 Then run frontend:
 
@@ -56,4 +56,5 @@ npm run dev
 
 ## Notes
 - Current frontend sends `POST` with `{ action, payload }`.
+- Opening the Web App URL with `GET` returns a health check.
 - New modules can be added by extending action switch in `Code.gs` and adding service functions in `src/lib/dataService.ts`.

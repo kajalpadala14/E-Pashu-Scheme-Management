@@ -16,12 +16,11 @@ export const FieldTasksCard: React.FC<Props> = ({ tasks, onToggle, controls }) =
 
   const parsed = useMemo(() => {
     const list = tasks || [];
-    // try to support optional date fields if present on rows
-    const dateField = list.find((t) => !!(t as any).dueDate) ? "dueDate" : (list.find((t) => !!(t as any).date) ? "date" : "");
+    const dateField: "dueDate" | "date" | "" = list.find((t) => !!t.dueDate) ? "dueDate" : (list.find((t) => !!t.date) ? "date" : "");
 
     const filtered = list.filter((task) => {
       if (!dateField || (!fromDate && !toDate)) return true;
-      const raw = String((task as any)[dateField] || "");
+      const raw = String(task[dateField] || "");
       if (!raw) return true;
       const d = new Date(raw);
       if (fromDate) {
@@ -81,7 +80,7 @@ export const FieldTasksCard: React.FC<Props> = ({ tasks, onToggle, controls }) =
                   <div className="text-xs text-muted-foreground">{task.village || "-"}</div>
                 </div>
                 <div className="flex items-center gap-2">
-                  <div className="text-xs text-muted-foreground">{(task as any).dueDate || (task as any).date || ""}</div>
+                  <div className="text-xs text-muted-foreground">{task.dueDate || task.date || ""}</div>
                   <Button size="sm" variant={task.completed ? "outline" : "default"} onClick={() => onToggle(task.id)}>
                     {task.completed ? "Mark Pending" : "Mark Done"}
                   </Button>

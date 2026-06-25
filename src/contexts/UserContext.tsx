@@ -1,105 +1,67 @@
-import { createContext, useContext, useEffect, useMemo, useState } from "react";
-import { normalizeRole, roleLabels, type UserRole } from "@/lib/rbac";
-export type { UserRole } from "@/lib/rbac";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { UserContext, type UserContextValue } from "./sessionContext";
+import { readStoredUser, refreshSessionExpiry, sessionRoleLabels, USER_STORAGE_KEY, withSessionToken, type SessionUser } from "./userSession";
+import { lookupUserByEmail } from "@/lib/dataService";
+import { normalizeRole } from "@/lib/rbac";
 
-export interface SessionUser {
-  id?: string;
-  name: string;
-  role: UserRole;
-  region: string;
-  email: string;
-  active?: boolean;
-}
+export function UserProvider({ children }: { children: ReactNode }) {
+  const [user, setUser] = useState<SessionUser | null>(null);
+  const [sessionChecking, setSessionChecking] = useState(true);
 
-const USER_STORAGE_KEY = "e-pashu-session-user";
+  useEffect(() => {
+    let cancelled = false;
 
-const defaultUsers: Record<UserRole, SessionUser> = {
-  admin: {
-    name: "Dr. Asha Verma",
-    role: "admin",
-    region: "",
-    email: "admin@epashu.gov",
-  },
-  veterinary_doctor: {
-    name: "Dr. Rohit Mehta",
-    role: "veterinary_doctor",
-    region: "",
-    email: "vet@epashu.gov",
-  },
-  field_officer: {
-    name: "Rahul Kumar",
-    role: "field_officer",
-    region: "",
-    email: "fo.rampur@epashu.gov",
-  },
-  block_officer: {
-    name: "Block Scheme Officer",
-    role: "block_officer",
-    region: "Dantewada",
-    email: "block.dantewada@epashu.gov",
-  },
-  data_entry_operator: {
-    name: "Scheme Data Entry Operator",
-    role: "data_entry_operator",
-    region: "",
-    email: "scheme.data@epashu.gov",
-  },
-  departmental_officer: {
-    name: "Manoj Kumar",
-    role: "departmental_officer",
-    region: "",
-    email: "departmental@epashu.gov",
-  },
-  deputy_director_vet: {
-    name: "Dr. Neha Singh",
-    role: "deputy_director_vet",
-    region: "",
-    email: "deputy.director@epashu.gov",
-  },
-};
+    async function verifyStoredSession() {
+      const storedUser = readStoredUser();
+      if (!storedUser) {
+        if (!cancelled) {
+          setSessionChecking(false);
+        }
+        return;
+      }
 
-interface UserContextValue {
-  user: SessionUser | null;
-  roleLabel: string;
-  setUser: (user: SessionUser | null) => void;
-  logout: () => void;
-}
+      try {
+        const directoryUser = await lookupUserByEmail(storedUser.email);
+        if (!directoryUser || !directoryUser.active) {
+          throw new Error("Session is no longer active");
+        }
 
-const UserContext = createContext<UserContextValue | undefined>(undefined);
+        const verifiedRole = normalizeRole(directoryUser.role);
+        if (verifiedRole !== storedUser.role) {
+          throw new Error("Session role no longer matches directory access");
+        }
 
-function readStoredUser(): SessionUser | null {
-  if (typeof window === "undefined") {
-    return null;
-  }
-
-  try {
-    const raw = window.localStorage.getItem(USER_STORAGE_KEY);
-    if (!raw) {
-      return null;
+        if (!cancelled) {
+          setUser(
+            withSessionToken({
+              ...storedUser,
+              id: directoryUser.id,
+              name: directoryUser.name || storedUser.name,
+              role: verifiedRole,
+              region: directoryUser.region || storedUser.region,
+              email: directoryUser.email || storedUser.email,
+              active: directoryUser.active,
+            }),
+          );
+        }
+      } catch {
+        if (!cancelled) {
+          window.localStorage.removeItem(USER_STORAGE_KEY);
+          setUser(null);
+        }
+      } finally {
+        if (!cancelled) {
+          setSessionChecking(false);
+        }
+      }
     }
 
-    const parsed = JSON.parse(raw) as Partial<SessionUser>;
-    if (parsed.role && parsed.email) {
-      const role = normalizeRole(parsed.role);
-      const fallback = defaultUsers[role];
-      return {
-        id: parsed.id,
-        role,
-        name: typeof parsed.name === "string" && parsed.name.trim() ? parsed.name : fallback.name,
-        region: typeof parsed.region === "string" && parsed.region.trim() ? parsed.region : fallback.region,
-        email: String(parsed.email).trim().toLowerCase(),
-        active: parsed.active !== false,
-      };
-    }
-  } catch {
-    return null;
-  }
+    void verifyStoredSession();
 
-  return null;
-}
-
-export function UserProvider({ children }: { children: React.ReactNode }) {
-  const [user, setUser] = useState<SessionUser | null>(() => readStoredUser());
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     if (user) {
@@ -109,26 +71,38 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
     }
   }, [user]);
 
+  useEffect(() => {
+    if (!user) {
+      return undefined;
+    }
+
+    const logoutAt = new Date(user.expiresAt || 0).getTime();
+    const timeoutMs = Math.max(0, logoutAt - Date.now());
+    const timeout = window.setTimeout(() => setUser(null), timeoutMs);
+
+    const extendSession = () => {
+      setUser((current) => current ? refreshSessionExpiry(current) : current);
+    };
+
+    const events: Array<keyof WindowEventMap> = ["click", "keydown", "mousemove", "touchstart"];
+    events.forEach((eventName) => window.addEventListener(eventName, extendSession));
+
+    return () => {
+      window.clearTimeout(timeout);
+      events.forEach((eventName) => window.removeEventListener(eventName, extendSession));
+    };
+  }, [user]);
+
   const value = useMemo<UserContextValue>(
     () => ({
       user,
-      roleLabel: user ? roleLabels[user.role] : "Guest",
-      setUser,
+      roleLabel: user ? sessionRoleLabels[user.role] : "Guest",
+      setUser: (nextUser) => setUser(nextUser ? withSessionToken(nextUser) : null),
       logout: () => setUser(null),
+      sessionChecking,
     }),
-    [user],
+    [sessionChecking, user],
   );
 
   return <UserContext.Provider value={value}>{children}</UserContext.Provider>;
 }
-
-export function useUser() {
-  const context = useContext(UserContext);
-  if (!context) {
-    throw new Error("useUser must be used within UserProvider");
-  }
-  return context;
-}
-
-export const sessionUsers = defaultUsers;
-export const sessionRoleLabels = roleLabels;

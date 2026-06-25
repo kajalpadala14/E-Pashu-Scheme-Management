@@ -8,11 +8,13 @@ import type {
   DiseaseTreatmentRecord,
   Farmer,
   FieldOfficerTask,
+  InstituteRecord,
   LocationRecord,
   EmergencyReport,
   GeoTaggedPhotoEvidence,
   PregnancyRecord,
   ReminderItem,
+  PortalSettingsRecord,
   SchemeBeneficiaryRecord,
   SchemeDataRecord,
   UserDirectoryRecord,
@@ -91,7 +93,52 @@ async function callAppsScript<T>(action: string, payload?: Record<string, unknow
 }
 
 function toNumber(value: unknown) {
-  return Number(value ?? 0);
+  if (typeof value === "number") {
+    return Number.isFinite(value) ? value : 0;
+  }
+
+  const normalized = String(value ?? "").replace(/,/g, "").trim();
+  if (!normalized) {
+    return 0;
+  }
+
+  const parsed = Number(normalized);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function pickText(row: Record<string, unknown>, ...keys: string[]) {
+  for (const key of keys) {
+    const value = row[key];
+    if (value !== undefined && value !== null && String(value).trim() !== "") {
+      return String(value).trim();
+    }
+  }
+
+  return "";
+}
+
+function pickNumber(row: Record<string, unknown>, ...keys: string[]) {
+  for (const key of keys) {
+    const value = row[key];
+    if (value !== undefined && value !== null && String(value).trim() !== "") {
+      return toNumber(value);
+    }
+  }
+
+  return 0;
+}
+
+function hasAnyValue(row: Record<string, unknown>, keys: string[]) {
+  return keys.some((key) => String(row[key] ?? "").trim() !== "");
+}
+
+function isUsefulSchemeDataRow(row: Record<string, unknown>) {
+  const hasRequiredIdentity = hasAnyValue(row, ["schemeName", "scheme", "nameOfScheme", "schemeTitle"])
+    && hasAnyValue(row, ["financialYear", "year"])
+    && hasAnyValue(row, ["block", "blockName"]);
+  const hasLocation = hasAnyValue(row, ["instituteName", "institute_name", "institute", "village"]);
+
+  return hasRequiredIdentity && hasLocation;
 }
 
 function normalizeAnimalStatus(value: unknown): Animal["status"] {
@@ -107,7 +154,7 @@ function normalizeAnimals(input: unknown): Animal[] {
     return [];
   }
 
-  return input.map((item, idx) => {
+  return input.filter((item) => isUsefulSchemeDataRow((item ?? {}) as Record<string, unknown>)).map((item, idx) => {
     const row = (item ?? {}) as Record<string, unknown>;
     return {
       id: String(row.id ?? `ANM-${idx + 1}`),
@@ -299,19 +346,56 @@ function normalizeSchemeDataRecords(input: unknown): SchemeDataRecord[] {
 
   return input.map((item, idx) => {
     const row = (item ?? {}) as Record<string, unknown>;
+    const achievement = pickNumber(row, "distributedUnits", "achievement", "achievedUnits", "physicalAchievement", "unitsDistributed");
+    const approvedCases = pickNumber(row, "approvedCases", "approved", "approval", "sanctionedCases", "achievement") || achievement;
+    const scCount = pickNumber(row, "scCount", "sc");
+    const stCount = pickNumber(row, "stCount", "st");
+    const obcCount = pickNumber(row, "obcCount", "obc");
+    const generalCount = pickNumber(row, "generalCount", "general");
+    const otherCount = pickNumber(row, "otherCount", "other");
+    const casteTotal = scCount + stCount + obcCount + generalCount + otherCount;
+
     return {
       id: String(row.id ?? `SCH-${idx + 1}`),
-      financialYear: String(row.financialYear ?? ""),
-      schemeName: String(row.schemeName ?? ""),
+      financialYear: pickText(row, "financialYear", "year"),
+      schemeName: pickText(row, "schemeName", "scheme", "nameOfScheme", "schemeTitle"),
+      block: pickText(row, "block", "blockName"),
+      village: pickText(row, "village", "institute", "instituteName"),
+      instituteId: pickText(row, "instituteId", "institute_id"),
+      instituteName: pickText(row, "instituteName", "institute_name", "institute", "village"),
+      target: pickNumber(row, "target", "targetUnits", "totalTarget"),
+      approvedCases,
+      distributedUnits: achievement,
+      pendingCases: pickNumber(row, "pendingCases", "pending") || Math.max(approvedCases - achievement, 0),
+      scCount,
+      stCount,
+      obcCount,
+      generalCount,
+      otherCount,
+      totalBeneficiaries: pickNumber(row, "totalBeneficiaries", "beneficiaries", "total") || casteTotal,
+      financialProgressAmount: pickNumber(row, "financialProgressAmount", "financialProgress", "amount"),
+      physicalProgressPercentage: pickNumber(row, "physicalProgressPercentage", "physicalProgress", "progress"),
+      remarks: pickText(row, "remarks", "remark"),
+      createdAt: String(row.createdAt ?? ""),
+      updatedAt: String(row.updatedAt ?? ""),
+      createdBy: String(row.createdBy ?? ""),
+    };
+  });
+}
+
+function normalizeInstituteRecords(input: unknown): InstituteRecord[] {
+  if (!Array.isArray(input) || input.length === 0) {
+    return [];
+  }
+
+  return input.map((item, idx) => {
+    const row = (item ?? {}) as Record<string, unknown>;
+    return {
+      id: String(row.id ?? `INS-${idx + 1}`),
+      instituteName: String(row.instituteName ?? row.name ?? ""),
       block: String(row.block ?? ""),
-      village: String(row.village ?? ""),
-      target: toNumber(row.target),
-      approvedCases: toNumber(row.approvedCases),
-      distributedUnits: toNumber(row.distributedUnits),
-      pendingCases: toNumber(row.pendingCases),
-      financialProgressAmount: toNumber(row.financialProgressAmount),
-      physicalProgressPercentage: toNumber(row.physicalProgressPercentage),
-      remarks: String(row.remarks ?? ""),
+      instituteType: String(row.instituteType ?? row.type ?? ""),
+      status: String(row.status ?? "Active") === "Inactive" ? "Inactive" : "Active",
       createdAt: String(row.createdAt ?? ""),
       updatedAt: String(row.updatedAt ?? ""),
       createdBy: String(row.createdBy ?? ""),
@@ -328,26 +412,35 @@ function normalizeSchemeBeneficiaryRecords(input: unknown): SchemeBeneficiaryRec
     const row = (item ?? {}) as Record<string, unknown>;
     return {
       id: String(row.id ?? `BEN-${idx + 1}`),
-      beneficiaryName: String(row.beneficiaryName ?? ""),
-      fatherHusbandName: String(row.fatherHusbandName ?? ""),
-      mobileNumber: String(row.mobileNumber ?? ""),
-      aadhaarNumber: String(row.aadhaarNumber ?? ""),
-      rationCardNumber: String(row.rationCardNumber ?? ""),
-      bankAccountNumber: String(row.bankAccountNumber ?? ""),
-      ifscCode: String(row.ifscCode ?? ""),
-      village: String(row.village ?? ""),
-      gramPanchayat: String(row.gramPanchayat ?? ""),
-      block: String(row.block ?? ""),
+      beneficiaryId: pickText(row, "beneficiaryId", "beneficiary_id", "id") || `BEN-${String(idx + 1).padStart(4, "0")}`,
+      beneficiaryName: pickText(row, "beneficiaryName", "fullName", "name"),
+      fatherHusbandName: pickText(row, "fatherHusbandName", "fatherName", "husbandName"),
+      mobileNumber: pickText(row, "mobileNumber", "mobile", "phone"),
+      aadhaarNumber: pickText(row, "aadhaarNumber", "aadhaar", "aadharNumber", "aadhar"),
+      rationCardNumber: pickText(row, "rationCardNumber", "rationCard"),
+      gender: String(row.gender ?? "Female") as SchemeBeneficiaryRecord["gender"],
+      accountHolderName: pickText(row, "accountHolderName", "beneficiaryName", "fullName", "name"),
+      bankName: pickText(row, "bankName", "bank"),
+      bankAccountNumber: pickText(row, "bankAccountNumber", "accountNumber"),
+      ifscCode: pickText(row, "ifscCode", "ifsc"),
+      village: pickText(row, "village", "institute", "instituteName"),
+      gramPanchayat: pickText(row, "gramPanchayat", "panchayat"),
+      block: pickText(row, "block", "blockName"),
       category: String(row.category ?? "General") as SchemeBeneficiaryRecord["category"],
       womenBeneficiary: String(row.womenBeneficiary ?? "No") as SchemeBeneficiaryRecord["womenBeneficiary"],
       pvtg: String(row.pvtg ?? "No") as SchemeBeneficiaryRecord["pvtg"],
       fraBeneficiary: String(row.fraBeneficiary ?? "No") as SchemeBeneficiaryRecord["fraBeneficiary"],
-      schemeName: String(row.schemeName ?? ""),
+      schemeName: pickText(row, "schemeName", "scheme", "nameOfScheme", "schemeTitle"),
+      status: String(row.status ?? (row.dateOfDistribution ? "Distributed" : row.dateOfApproval ? "Approved" : "Registered")) as SchemeBeneficiaryRecord["status"],
+      verificationDate: String(row.verificationDate ?? ""),
+      verificationOfficer: String(row.verificationOfficer ?? ""),
+      verificationRemarks: String(row.verificationRemarks ?? ""),
       dateOfApproval: String(row.dateOfApproval ?? ""),
       dateOfDistribution: String(row.dateOfDistribution ?? ""),
-      unitsDistributed: toNumber(row.unitsDistributed),
+      unitsDistributed: pickNumber(row, "unitsDistributed", "quantity", "distributedUnits", "achievement"),
       distributionPhotoUrl: String(row.distributionPhotoUrl ?? ""),
       distributionPhotoFileId: String(row.distributionPhotoFileId ?? ""),
+      distributionRemarks: String(row.distributionRemarks ?? ""),
       remarks: String(row.remarks ?? ""),
       createdAt: String(row.createdAt ?? ""),
       updatedAt: String(row.updatedAt ?? ""),
@@ -559,6 +652,21 @@ function normalizeUsers(input: unknown): UserDirectoryRecord[] {
   });
 }
 
+function normalizePortalSettings(input: unknown): PortalSettingsRecord {
+  const row = Array.isArray(input) ? (input[0] as Record<string, unknown> | undefined) : (input as Record<string, unknown> | undefined);
+  return {
+    id: String(row?.id ?? "public-home"),
+    heroTitle: String(row?.heroTitle ?? "").trim(),
+    heroSubtitle: String(row?.heroSubtitle ?? "").trim(),
+    overviewLabel: String(row?.overviewLabel ?? "").trim(),
+    reportOne: String(row?.reportOne ?? "").trim(),
+    reportTwo: String(row?.reportTwo ?? "").trim(),
+    reportThree: String(row?.reportThree ?? "").trim(),
+    updatedAt: String(row?.updatedAt ?? ""),
+    updatedBy: String(row?.updatedBy ?? ""),
+  };
+}
+
 function normalizeFieldOfficers(input: unknown): FieldOfficerRecord[] {
   if (!Array.isArray(input)) {
     return [];
@@ -652,9 +760,101 @@ function normalizeDashboardData(input: DashboardData): DashboardData {
   };
 }
 
+export const EMPTY_DASHBOARD_DATA: DashboardData = {
+  vaccinationTrends: [],
+  healthStatusData: [],
+  monthlyActivity: [],
+  activities: [],
+};
+
+export const DEFAULT_PORTAL_SETTINGS: PortalSettingsRecord = {
+  id: "public-home",
+  heroTitle: "",
+  heroSubtitle: "",
+  overviewLabel: "",
+  reportOne: "",
+  reportTwo: "",
+  reportThree: "",
+};
+
 export async function getDashboardData(): Promise<DashboardData> {
   const raw = await callAppsScript<DashboardData>("dashboard.get");
   return normalizeDashboardData(raw);
+}
+
+export interface LandingPageData {
+  dashboardData: DashboardData;
+  schemeRecords: SchemeDataRecord[];
+  beneficiaryRecords: SchemeBeneficiaryRecord[];
+  institutes: InstituteRecord[];
+  locations: LocationRecord[];
+  villageInsights: VillageInsight[];
+  portalSettings: PortalSettingsRecord;
+}
+
+export const DEFAULT_LANDING_PAGE_DATA: LandingPageData = {
+  dashboardData: EMPTY_DASHBOARD_DATA,
+  schemeRecords: [],
+  beneficiaryRecords: [],
+  institutes: [],
+  locations: [],
+  villageInsights: [],
+  portalSettings: DEFAULT_PORTAL_SETTINGS,
+};
+
+function normalizeLandingPageData(raw: LandingPageData): LandingPageData {
+  return {
+    dashboardData: normalizeDashboardData(raw.dashboardData || EMPTY_DASHBOARD_DATA),
+    schemeRecords: normalizeSchemeDataRecords(raw.schemeRecords),
+    beneficiaryRecords: normalizeSchemeBeneficiaryRecords(raw.beneficiaryRecords),
+    institutes: normalizeInstituteRecords(raw.institutes),
+    locations: normalizeLocations(raw.locations),
+    villageInsights: normalizeVillageInsights(raw.villageInsights),
+    portalSettings: normalizePortalSettings(raw.portalSettings),
+  };
+}
+
+function hasUsefulLandingData(landingData: LandingPageData) {
+  return !!(
+    landingData.schemeRecords.length ||
+    landingData.beneficiaryRecords.length ||
+    landingData.institutes.length ||
+    landingData.locations.length ||
+    landingData.portalSettings.heroTitle
+  );
+}
+
+export async function getLandingPageData(): Promise<LandingPageData> {
+  try {
+    const raw = await callAppsScript<LandingPageData>("public.getLandingData");
+    const landingData = normalizeLandingPageData(raw);
+
+    if (hasUsefulLandingData(landingData)) {
+      return landingData;
+    }
+  } catch (error) {
+    console.warn("Falling back to direct sheet actions for landing page data", error);
+  }
+
+  const [dashboardData, schemeRecords, beneficiaryRecords, institutes, locations, villageInsights, portalSettings] = await Promise.all([
+    getDashboardData().catch(() => EMPTY_DASHBOARD_DATA),
+    listSchemeDataRecords().catch(() => []),
+    listSchemeBeneficiaryRecords().catch(() => []),
+    listInstitutes().catch(() => []),
+    listLocations().catch(() => []),
+    callAppsScript<unknown>("analytics.villageInsights", { _meta: {} }).then(normalizeVillageInsights).catch(() => []),
+    callAppsScript<unknown>("portalSettings.get", { _meta: {} }).then(normalizePortalSettings).catch(() => DEFAULT_PORTAL_SETTINGS),
+  ]);
+
+  return {
+    dashboardData,
+    schemeRecords,
+    beneficiaryRecords,
+    institutes,
+    locations,
+    villageInsights,
+    portalSettings,
+  };
 }
 
 export async function listAnimals(): Promise<Animal[]> {
@@ -807,6 +1007,31 @@ export async function deleteLocation(id: string, input?: Partial<LocationRecord>
   return callAppsScript<{ id: string; deleted: boolean }>("locations.delete", { id, input });
 }
 
+export async function listInstitutes(): Promise<InstituteRecord[]> {
+  try {
+    const raw = await callAppsScript<unknown>("institutes.list");
+    const result = normalizeInstituteRecords(raw);
+    return result;
+  } catch (error) {
+    console.warn("Failed to fetch institutes from backend", error);
+    return [];
+  }
+}
+
+export async function createInstitute(input: Omit<InstituteRecord, "id" | "createdAt" | "updatedAt" | "createdBy">): Promise<InstituteRecord> {
+  const raw = await callAppsScript<unknown>("institutes.create", { input });
+  return normalizeInstituteRecords([raw])[0];
+}
+
+export async function updateInstitute(input: InstituteRecord): Promise<InstituteRecord> {
+  const raw = await callAppsScript<unknown>("institutes.update", { input });
+  return normalizeInstituteRecords([raw])[0];
+}
+
+export async function deleteInstitute(id: string): Promise<{ id: string; deleted: boolean }> {
+  return await callAppsScript<{ id: string; deleted: boolean }>("institutes.delete", { id });
+}
+
 export async function listSchemeDataRecords(): Promise<SchemeDataRecord[]> {
   const raw = await callAppsScript<unknown>("schemeData.list");
   return normalizeSchemeDataRecords(raw);
@@ -907,7 +1132,7 @@ function normalizeFieldOfficerTask(input: unknown): FieldOfficerTask {
     task: String(row.task || row.title || ""),
     village: String(row.village || ""),
     // completed stored as count when available, otherwise boolean -> convert to 1/0
-    completed: completedNumber,
+    completed: completedNumber > 0,
     officerId: String(row.officerId || ""),
     status: String(row.status || "Open"),
     target: Number(row.target || 0),
@@ -1007,6 +1232,16 @@ export async function listUsers(): Promise<UserDirectoryRecord[]> {
   return normalizeUsers(raw);
 }
 
+export async function getPortalSettings(): Promise<PortalSettingsRecord> {
+  const raw = await callAppsScript<unknown>("portalSettings.get");
+  return normalizePortalSettings(raw);
+}
+
+export async function upsertPortalSettings(input: PortalSettingsRecord): Promise<PortalSettingsRecord> {
+  const raw = await callAppsScript<unknown>("portalSettings.upsert", { input });
+  return normalizePortalSettings(raw);
+}
+
 export async function lookupUserByEmail(email: string): Promise<UserDirectoryRecord> {
   const normalizedEmail = String(email || "").trim().toLowerCase();
   const raw = await callAppsScript<unknown>("users.lookupByEmail", { email: normalizedEmail });
@@ -1021,8 +1256,15 @@ export async function upsertUser(
   return normalizeUsers([raw])[0];
 }
 
-export async function deleteUserByEmail(email: string, options?: { actorRole?: string }): Promise<{ email: string; deleted: boolean }> {
-  return callAppsScript<{ email: string; deleted: boolean }>("users.delete", { email, actorRole: options?.actorRole });
+export async function resetUserPassword(email: string, options?: { actorRole?: string }): Promise<{ email: string; resetRequired: boolean; passwordResetAt: string; temporaryPassword: string }> {
+  return callAppsScript<{ email: string; resetRequired: boolean; passwordResetAt: string; temporaryPassword: string }>("users.resetPassword", {
+    email: String(email || "").trim().toLowerCase(),
+    actorRole: options?.actorRole,
+  });
+}
+
+export async function deleteUserByEmail(email: string, options?: { actorRole?: string; id?: string }): Promise<{ email: string; id?: string; deleted: boolean }> {
+  return callAppsScript<{ email: string; id?: string; deleted: boolean }>("users.delete", { email, id: options?.id, actorRole: options?.actorRole });
 }
 
 export async function createReminder(input: Omit<ReminderItem, "id" | "status" | "sentAt">): Promise<ReminderItem> {
