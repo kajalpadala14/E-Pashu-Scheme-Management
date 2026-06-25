@@ -9,24 +9,27 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useUser } from "@/contexts/useUser";
 import { listInstitutes, listLocations, listSchemeBeneficiaryRecords, listSchemeDataRecords } from "@/lib/dataService";
 import { buildSchemeSummaryTotals } from "@/lib/schemeAnalytics";
+import { getUserDataScope, filterInstitutesByScope, filterSchemesByScope, filterBeneficiariesByScope, getScopeLabel } from "@/lib/data-scope";
 
 export default function DashboardPage() {
   const { roleLabel, user } = useUser();
-  const { data: schemeRecords = [], error: schemeError, isLoading: schemesLoading } = useQuery({
+  const scope = useMemo(() => getUserDataScope(user), [user]);
+
+  const { data: rawSchemeRecords = [], error: schemeError, isLoading: schemesLoading } = useQuery({
     queryKey: ["schemeDataRecords"],
     queryFn: listSchemeDataRecords,
     staleTime: 5 * 60 * 1000,
     refetchOnWindowFocus: true,
   });
 
-  const { data: beneficiaryRecords = [], error: beneficiaryError, isLoading: beneficiariesLoading } = useQuery({
+  const { data: rawBeneficiaryRecords = [], error: beneficiaryError, isLoading: beneficiariesLoading } = useQuery({
     queryKey: ["schemeBeneficiaryRecords"],
     queryFn: listSchemeBeneficiaryRecords,
     staleTime: 5 * 60 * 1000,
     refetchOnWindowFocus: true,
   });
 
-  const { data: institutes = [], error: instituteError, isLoading: institutesLoading } = useQuery({
+  const { data: rawInstitutes = [], error: instituteError, isLoading: institutesLoading } = useQuery({
     queryKey: ["institutes"],
     queryFn: listInstitutes,
     staleTime: 5 * 60 * 1000,
@@ -40,11 +43,16 @@ export default function DashboardPage() {
     refetchOnWindowFocus: true,
   });
 
+  // Apply centralized RBAC scope filtering
+  const schemeRecords = useMemo(() => filterSchemesByScope(rawSchemeRecords, scope), [rawSchemeRecords, scope]);
+  const beneficiaryRecords = useMemo(() => filterBeneficiariesByScope(rawBeneficiaryRecords, scope), [rawBeneficiaryRecords, scope]);
+  const institutes = useMemo(() => filterInstitutesByScope(rawInstitutes, scope), [rawInstitutes, scope]);
+
   const error = schemeError || beneficiaryError || instituteError || locationError;
   const isLoading = schemesLoading || beneficiariesLoading || institutesLoading || locationsLoading;
+
   const totals = useMemo(() => {
     const schemeTotals = buildSchemeSummaryTotals(schemeRecords, beneficiaryRecords, institutes, locations);
-
     return {
       schemeRecords: schemeTotals.totalSchemeRecords,
       totalAchievement: schemeTotals.distributedUnits,
@@ -75,10 +83,15 @@ export default function DashboardPage() {
       progress: record.physicalProgressPercentage,
     })), [totals.linkedRecords]);
 
+  const scopeLabel = getScopeLabel(scope);
+
   return (
     <DashboardLayout>
       <div className="space-y-6">
-        <PageHeader title="Management Dashboard" description={`Secure portal access for ${roleLabel}${user?.region ? ` - ${user.region}` : ""}.`} />
+        <PageHeader
+          title="Management Dashboard"
+          description={`${roleLabel} — ${scopeLabel}`}
+        />
         {error ? (
           <Card className="border-red-200">
             <CardContent className="p-4 text-sm text-red-700">Unable to load live dashboard data: {error instanceof Error ? error.message : "Unexpected error"}</CardContent>
@@ -93,9 +106,7 @@ export default function DashboardPage() {
 
         <div className="grid gap-6 xl:grid-cols-2">
           <Card>
-            <CardHeader>
-              <CardTitle>Live Summary Snapshot</CardTitle>
-            </CardHeader>
+            <CardHeader><CardTitle>Live Summary Snapshot</CardTitle></CardHeader>
             <CardContent className="h-80">
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={summaryChartData}>
@@ -110,9 +121,7 @@ export default function DashboardPage() {
           </Card>
 
           <Card>
-            <CardHeader>
-              <CardTitle>Scheme Progress Snapshot</CardTitle>
-            </CardHeader>
+            <CardHeader><CardTitle>Scheme Progress Snapshot</CardTitle></CardHeader>
             <CardContent className="h-80">
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={schemeChartData}>

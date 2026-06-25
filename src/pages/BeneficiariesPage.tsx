@@ -8,11 +8,14 @@ import { Card, CardContent } from "@/components/ui/card";
 import { useUser } from "@/contexts/useUser";
 import { listSchemeBeneficiaryRecords, listSchemeDataRecords } from "@/lib/dataService";
 import { collectSchemeNames } from "@/lib/schemeAnalytics";
+import { getUserDataScope, filterBeneficiariesByScope, filterSchemesByScope } from "@/lib/data-scope";
 import type { SchemeBeneficiaryRecord } from "@/lib/types";
 
 export default function BeneficiariesPage() {
   const { user } = useUser();
-  const { data: records = [], error, isLoading } = useQuery({
+  const scope = useMemo(() => getUserDataScope(user), [user]);
+
+  const { data: rawRecords = [], error, isLoading } = useQuery({
     queryKey: ["schemeBeneficiaryRecords"],
     queryFn: listSchemeBeneficiaryRecords,
     initialData: [] as SchemeBeneficiaryRecord[],
@@ -20,12 +23,16 @@ export default function BeneficiariesPage() {
     refetchOnWindowFocus: true,
   });
 
-  const { data: schemeRecords = [] } = useQuery({
+  const { data: rawSchemeRecords = [] } = useQuery({
     queryKey: ["schemeDataRecords"],
     queryFn: listSchemeDataRecords,
     staleTime: 30 * 1000,
     refetchOnWindowFocus: true,
   });
+
+  // Apply centralized RBAC scope filtering
+  const records = useMemo(() => filterBeneficiariesByScope(rawRecords, scope), [rawRecords, scope]);
+  const schemeRecords = useMemo(() => filterSchemesByScope(rawSchemeRecords, scope), [rawSchemeRecords, scope]);
 
   const beneficiarySchemes = useMemo(() => collectSchemeNames(schemeRecords, records), [records, schemeRecords]);
 

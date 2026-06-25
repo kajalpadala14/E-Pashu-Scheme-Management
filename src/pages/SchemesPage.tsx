@@ -52,6 +52,7 @@ import { collectSchemeNames, linkSchemeRecords } from "@/lib/schemeAnalytics";
 import { safeSelectOptions, safeSelectValue } from "@/lib/selectOptions";
 import type { InstituteRecord, SchemeBeneficiaryRecord, SchemeDataRecord } from "@/lib/types";
 import { cn } from "@/lib/utils";
+import { getUserDataScope, filterSchemesByScope, filterBeneficiariesByScope, filterInstitutesByScope, matchesBlockScope, type DataScope } from "@/lib/data-scope";
 
 type SchemeForm = Omit<SchemeDataRecord, "id" | "createdAt" | "updatedAt" | "createdBy">;
 type UploadSummary = { success: number; errors: string[] } | null;
@@ -66,6 +67,7 @@ const tablePageSize = 10;
 const emptyForm: SchemeForm = {
   financialYear: financialYears[0],
   schemeName: "",
+  schemeLevel: "State",
   block: "",
   village: "",
   instituteId: "",
@@ -88,6 +90,7 @@ const emptyForm: SchemeForm = {
 export default function SchemesPage() {
   const queryClient = useQueryClient();
   const { user } = useUser();
+  const scope = useMemo(() => getUserDataScope(user), [user]);
   const [financialYear, setFinancialYear] = useState("All Financial Years");
   const [scheme, setScheme] = useState("All Schemes");
   const [block, setBlock] = useState("All Blocks");
@@ -105,7 +108,7 @@ export default function SchemesPage() {
   const [page, setPage] = useState(1);
   const deferredSearch = useDeferredValue(search);
 
-  const { data: records = [], error, isLoading } = useQuery({
+  const { data: rawRecords = [], error, isLoading } = useQuery({
     queryKey: ["schemeDataRecords"],
     queryFn: listSchemeDataRecords,
     initialData: [] as SchemeDataRecord[],
@@ -113,7 +116,7 @@ export default function SchemesPage() {
     refetchOnWindowFocus: true,
   });
 
-  const { data: beneficiaryRecords = [] } = useQuery({
+  const { data: rawBeneficiaryRecords = [] } = useQuery({
     queryKey: ["schemeBeneficiaryRecords"],
     queryFn: listSchemeBeneficiaryRecords,
     initialData: [] as SchemeBeneficiaryRecord[],
@@ -121,7 +124,7 @@ export default function SchemesPage() {
     refetchOnWindowFocus: true,
   });
 
-  const { data: institutes = [] } = useQuery({
+  const { data: rawInstitutes = [] } = useQuery({
     queryKey: ["institutes"],
     queryFn: listInstitutes,
     initialData: [] as InstituteRecord[],
@@ -129,11 +132,16 @@ export default function SchemesPage() {
     refetchOnWindowFocus: true,
   });
 
+  // Apply centralized RBAC scope filtering
+  const records = useMemo(() => filterSchemesByScope(rawRecords, scope), [rawRecords, scope]);
+  const beneficiaryRecords = useMemo(() => filterBeneficiariesByScope(rawBeneficiaryRecords, scope), [rawBeneficiaryRecords, scope]);
+  const institutes = useMemo(() => filterInstitutesByScope(rawInstitutes, scope), [rawInstitutes, scope]);
+
   const schemeNames = useMemo(() => collectSchemeNames(records, beneficiaryRecords), [beneficiaryRecords, records]);
 
-  const canAdd = Boolean(user);
-  const canDelete = Boolean(user);
-  const canEdit = () => Boolean(user);
+  const canAdd = Boolean(user && ["admin", "district_officer", "deputy_director_vet", "departmental_officer"].includes(user.role));
+  const canDelete = Boolean(user && ["admin", "district_officer", "deputy_director_vet", "departmental_officer"].includes(user.role));
+  const canEdit = (record: SchemeDataRecord) => Boolean(user && ["admin", "district_officer", "deputy_director_vet", "departmental_officer", "block_officer", "data_entry_operator"].includes(user.role));
 
   const options = useMemo(() => ({
     years: unique(records.map((item) => item.financialYear)),
@@ -260,7 +268,7 @@ export default function SchemesPage() {
 
   const submitForm = async () => {
     setFormSubmitted(true);
-    const formWithInstitute = applyInstituteToSchemeForm(form, institutes, user?.role, user?.region);
+    const formWithInstitute = applyInstituteToSchemeForm(form, institutes, scope);
     const formError = validateSchemeRecord(formWithInstitute, records, editingRecord?.id);
     if (formError) {
       toast({ title: "Check scheme record", description: formError, variant: "destructive" });
@@ -273,7 +281,7 @@ export default function SchemesPage() {
   const startAdd = () => {
     setEditingRecord(null);
     setFormSubmitted(false);
-    setForm(applyInstituteToSchemeForm({ ...emptyForm }, institutes, user?.role, user?.region));
+    setForm(applyInstituteToSchemeForm({ ...emptyForm }, institutes, scope));
     setFormOpen(true);
   };
 
@@ -283,6 +291,7 @@ export default function SchemesPage() {
     setForm({
       financialYear: record.financialYear,
       schemeName: record.schemeName,
+      schemeLevel: record.schemeLevel ?? "State",
       block: record.block,
       village: record.village,
       instituteId: record.instituteId,
@@ -316,12 +325,12 @@ export default function SchemesPage() {
       const workbook = XLSX.read(await file.arrayBuffer(), { type: "array" });
       const worksheet = workbook.Sheets[workbook.SheetNames[0]];
       const rawRows = XLSX.utils.sheet_to_json<Record<string, unknown>>(worksheet, { defval: "" });
-      const parsed = rawRows.map((row) => normalizeSchemeForm(applyInstituteToSchemeForm(toSchemeRecord(row), institutes, user?.role, user?.region)));
+      const parsed = rawRows.map((row) => normalizeSchemeForm(applyInstituteToSchemeForm(toSchemeRecord(row), institutes, scope)));
       const errors = parsed.flatMap((item, index) => {
         const rowError = validateSchemeRecord(item, records);
         if (rowError) return [`Row ${index + 2}: ${rowError}`];
-        if ((user?.role === "block_officer" || user?.role === "field_officer") && !matchesBlock(user.region, item.block)) {
-          return [`Row ${index + 2}: block officers can only upload records for their assigned block.`];
+        if (scope.type !== "district" && !matchesBlockScope(scope, item.block)) {
+          return [`Row ${index + 2}: you can only upload records for your assigned block.`];
         }
         return [];
       });
@@ -601,42 +610,20 @@ function CompactKpi({ label, value, hint, icon: Icon, tone = "primary" }: { labe
 
 function SchemeRecordForm({ form, setForm, institutes, schemeNames, submitted }: { form: SchemeForm; setForm: React.Dispatch<React.SetStateAction<SchemeForm>>; institutes: InstituteRecord[]; schemeNames: string[]; submitted: boolean }) {
   const set = (key: keyof SchemeForm, value: string | number) => setForm((current) => ({ ...current, [key]: value }));
-  const activeInstitutes = institutes.filter((item) => item.status === "Active");
-  const blockOptions = unique([...schemeBlocks, ...activeInstitutes.map((item) => item.block)]);
-  const selectedBlockInstitutes = form.block ? activeInstitutes.filter((item) => item.block === form.block) : activeInstitutes;
-  const instituteOptions = selectedBlockInstitutes.map((item) => item.instituteName);
   const total = casteTotal(form);
-  const setBlock = (blockName: string) => {
-    setForm((current) => {
-      const selectedInstitute = activeInstitutes.find((item) => item.instituteName === current.instituteName);
-      const keepInstitute = selectedInstitute?.block === blockName;
-      return {
-        ...current,
-        block: blockName,
-        instituteId: keepInstitute ? current.instituteId : "",
-        instituteName: keepInstitute ? current.instituteName : "",
-        village: keepInstitute ? current.village : "",
-      };
-    });
-  };
-  const setInstitute = (name: string) => {
-    const selected = activeInstitutes.find((item) => item.instituteName === name);
-    setForm((current) => ({ ...current, instituteId: selected?.id || "", instituteName: name, village: name, block: selected?.block || current.block }));
-  };
   const errors = submitted ? validateSchemeRecord(form) : "";
   const fieldError = submitted && errors ? errors : "";
   return <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
     <FormField label="Financial Year" required error={fieldError}><FilterSelect value={form.financialYear} onChange={(value) => set("financialYear", value)} options={financialYears} /></FormField>
-    <FormField label="Scheme Name" required error={fieldError}><Input value={form.schemeName} onChange={(event) => set("schemeName", event.target.value)} list="scheme-name-options" className="h-10 rounded-lg" /><datalist id="scheme-name-options">{schemeNames.map((name) => <option key={name} value={name} />)}</datalist></FormField>
-    <FormField label="Block" error={fieldError}>
-      <FilterSelect value={form.block} onChange={setBlock} options={blockOptions} />
-    </FormField>
-    <FormField label="Institute Name" error={fieldError}>
-      {instituteOptions.length ? (
-        <FilterSelect value={form.instituteName || displayInstituteName(form)} onChange={setInstitute} options={instituteOptions} />
+    <FormField label="Scheme Name" required error={fieldError}>
+      {schemeNames.length ? (
+        <FilterSelect value={form.schemeName} onChange={(value) => set("schemeName", value)} options={schemeNames} />
       ) : (
-        <Input value={form.instituteName || displayInstituteName(form)} onChange={(event) => setInstitute(event.target.value)} placeholder="Enter institute name" className="h-10 rounded-lg" />
+        <Input value={form.schemeName} onChange={(event) => set("schemeName", event.target.value)} placeholder="Enter scheme name" className="h-10 rounded-lg" />
       )}
+    </FormField>
+    <FormField label="Scheme Level" required error={fieldError}>
+      <FilterSelect value={form.schemeLevel ?? "State"} onChange={(value) => set("schemeLevel", value)} options={["National", "State", "District"]} />
     </FormField>
     <FormField label="Target" required><NumberInput value={form.target} onChange={(value) => set("target", value)} /></FormField>
     <FormField label="Achievement"><NumberInput value={form.distributedUnits} onChange={(value) => { set("distributedUnits", value); set("approvedCases", value); }} /></FormField>
@@ -690,11 +677,10 @@ function isDateInFinancialYear(value: string, financialYear: string) { const yea
 function shortenScheme(name: string) { return name.replace(" Distribution", "").replace("Chhattisgarh ", "").replace(" Yojana", ""); }
 function formatCurrency(value: number) { return new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 0 }).format(value); }
 function getErrorMessage(error: unknown) { return error instanceof Error ? error.message : "Unexpected error"; }
-function matchesBlock(region: string, block: string) { const own = String(region || "").toLowerCase(); const target = String(block || "").toLowerCase(); return !!own && !!target && (own.includes(target) || target.includes(own)); }
 function compareSchemeValues(left: unknown, right: unknown, direction: SortDirection) { const leftValue = typeof left === "number" ? left : String(left ?? "").toLowerCase(); const rightValue = typeof right === "number" ? right : String(right ?? "").toLowerCase(); if (leftValue === rightValue) return 0; const comparison = typeof leftValue === "number" && typeof rightValue === "number" ? leftValue - rightValue : String(leftValue).localeCompare(String(rightValue)); return direction === "asc" ? comparison : -comparison; }
 function paginationItems(page: number, totalPages: number) { if (totalPages <= 5) return Array.from({ length: totalPages }, (_, index) => index + 1); const items: Array<number | "ellipsis"> = [1]; const start = Math.max(2, page - 1); const end = Math.min(totalPages - 1, page + 1); if (start > 2) items.push("ellipsis"); for (let index = start; index <= end; index += 1) items.push(index); if (end < totalPages - 1) items.push("ellipsis"); items.push(totalPages); return items; }
 function validateSchemeRecord(record: SchemeForm | Partial<SchemeDataRecord>, existingRecords: SchemeDataRecord[] = [], currentId?: string) { if (!record.financialYear || !record.schemeName) return "Financial year and scheme name are required."; const duplicate = existingRecords.some((item) => item.id !== currentId && item.financialYear.trim().toLowerCase() === String(record.financialYear).trim().toLowerCase() && item.schemeName.trim().toLowerCase() === String(record.schemeName).trim().toLowerCase() && item.block.trim().toLowerCase() === String(record.block || "").trim().toLowerCase() && displayInstituteName(item).toLowerCase() === displayInstituteName(record).toLowerCase()); if (duplicate) return "A scheme record for this financial year, scheme, block, and institute already exists."; const values = [record.target, record.approvedCases, record.distributedUnits, record.pendingCases, record.scCount, record.stCount, record.obcCount, record.generalCount, record.otherCount, record.totalBeneficiaries, record.financialProgressAmount, record.physicalProgressPercentage]; if (values.some((value) => !Number.isFinite(Number(value)) || Number(value) < 0)) return "All numeric fields must contain non-negative numbers."; if (Number(record.distributedUnits) > Number(record.target)) return "Achievement cannot exceed target."; return ""; }
-function applyInstituteToSchemeForm(record: SchemeForm, institutes: InstituteRecord[], role?: string, region?: string): SchemeForm { const active = institutes.filter((item) => item.status === "Active"); const currentName = displayInstituteName(record); const selected = currentName ? active.find((item) => item.instituteName === currentName) : active.find((item) => role === "block_officer" || role === "field_officer" ? matchesBlock(String(region || ""), item.block) : true); const instituteName = currentName || selected?.instituteName || ""; const block = selected?.block || record.block || (role === "block_officer" || role === "field_officer" ? String(region || "").trim() : ""); return { ...record, instituteId: selected?.id || record.instituteId || "", instituteName, village: instituteName || record.village, block }; }
+function applyInstituteToSchemeForm(record: SchemeForm, institutes: InstituteRecord[], scope: DataScope): SchemeForm { const active = institutes.filter((item) => item.status === "Active"); const currentName = displayInstituteName(record); const isRestricted = scope.type !== "district"; const selected = currentName ? active.find((item) => item.instituteName === currentName) : active.find((item) => isRestricted ? matchesBlockScope(scope, item.block) : true); const instituteName = currentName || selected?.instituteName || ""; const block = selected?.block || record.block || (isRestricted ? (scope.block ?? "") : ""); return { ...record, instituteId: selected?.id || record.instituteId || "", instituteName, village: instituteName || record.village, block }; }
 function calculateSchemeProgress(record: Pick<SchemeForm, "target" | "approvedCases" | "distributedUnits">) { const target = Number(record.target || 0); const approvedCases = Number(record.approvedCases || 0); const distributedUnits = Number(record.distributedUnits || 0); return { pendingCases: Math.max(approvedCases - distributedUnits, 0), physicalProgressPercentage: target ? Math.round((distributedUnits / target) * 100) : 0 }; }
 function normalizeSchemeForm(record: SchemeForm): SchemeForm { const totalBeneficiaries = casteTotal(record); const distributedUnits = Math.max(0, Number(record.distributedUnits || 0)); const normalized = { ...record, instituteName: displayInstituteName(record), village: displayInstituteName(record), target: Math.max(0, Number(record.target || 0)), approvedCases: distributedUnits, distributedUnits, scCount: Math.max(0, Number(record.scCount || 0)), stCount: Math.max(0, Number(record.stCount || 0)), obcCount: Math.max(0, Number(record.obcCount || 0)), generalCount: Math.max(0, Number(record.generalCount || 0)), otherCount: Math.max(0, Number(record.otherCount || 0)), totalBeneficiaries, financialProgressAmount: Math.max(0, Number(record.financialProgressAmount || 0)) }; const progress = calculateSchemeProgress(normalized); return { ...normalized, pendingCases: 0, physicalProgressPercentage: progress.physicalProgressPercentage }; }
 function normalizeHeader(value: string) { return value.toLowerCase().replace(/[^a-z0-9]/g, ""); }

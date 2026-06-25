@@ -1,11 +1,11 @@
-import { useDeferredValue, useEffect, useMemo, useState } from "react";
+import { useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
 import * as XLSX from "xlsx";
 import { Bar, BarChart, CartesianGrid, Cell, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import type { LucideIcon } from "lucide-react";
-import { BadgeCheck, ChevronLeft, ChevronRight, Download, Eye, FileSpreadsheet, FileText, PackageCheck, Pencil, Plus, Search, ShieldCheck, Trash2, Upload, UserX, Users } from "lucide-react";
+import { BadgeCheck, ChevronLeft, ChevronRight, ChevronDown, Download, Eye, FileSpreadsheet, FileText, PackageCheck, Pencil, Plus, Search, ShieldCheck, Trash2, Upload, UserX, Users } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -20,6 +20,7 @@ import type { SessionUser } from "@/contexts/userSession";
 import { bulkUpsertSchemeBeneficiaryRecords, createSchemeBeneficiaryRecord, deleteSchemeBeneficiaryRecord, updateSchemeBeneficiaryRecord, listInstitutes } from "@/lib/dataService";
 import { safeSelectOptions, safeSelectValue } from "@/lib/selectOptions";
 import type { InstituteRecord, SchemeBeneficiaryRecord } from "@/lib/types";
+import { getUserDataScope, matchesBlockScope } from "@/lib/data-scope";
 
 type BeneficiaryForm = Omit<SchemeBeneficiaryRecord, "id" | "createdAt" | "updatedAt" | "createdBy" | "distributionPhotoUrl" | "distributionPhotoFileId"> & {
   distributionPhotoDataUrl?: string;
@@ -70,6 +71,7 @@ const emptyForm: BeneficiaryForm = {
 
 export function SchemeBeneficiaryManagement({ records, schemes, user, isLoading }: { records: SchemeBeneficiaryRecord[]; schemes: string[]; user: SessionUser | null; isLoading: boolean }) {
   const queryClient = useQueryClient();
+  const scope = getUserDataScope(user);
   const { data: institutes = [] } = useQuery({
     queryKey: ["institutes"],
     queryFn: listInstitutes,
@@ -93,7 +95,7 @@ export function SchemeBeneficiaryManagement({ records, schemes, user, isLoading 
   const canWrite = Boolean(user);
   const canApprove = Boolean(user);
   const canDelete = Boolean(user && ["admin", "district_officer", "data_entry_operator", "departmental_officer", "deputy_director_vet"].includes(user.role));
-  const canEdit = (record: SchemeBeneficiaryRecord) => canApprove || user?.role === "data_entry_operator" || ((user?.role === "block_officer" || user?.role === "field_officer") && matchesBlock(user.region, record.block));
+  const canEdit = (record: SchemeBeneficiaryRecord) => canApprove || user?.role === "data_entry_operator" || (scope.type !== "district" && matchesBlockScope(scope, record.block));
 
   const activeInstitutes = useMemo(() => institutes.filter((item) => item.status === "Active"), [institutes]);
   const blocks = useMemo(() => unique([...activeInstitutes.map((item) => item.block), ...records.map((item) => item.block)]), [activeInstitutes, records]);
@@ -150,11 +152,11 @@ export function SchemeBeneficiaryManagement({ records, schemes, user, isLoading 
 
   const add = () => {
     setEditing(null);
-    const defaultInstitute = activeInstitutes.find((item) => user?.role === "block_officer" || user?.role === "field_officer" ? matchesBlock(user.region, item.block) : true);
+    const defaultInstitute = activeInstitutes.find((item) => scope.type !== "district" ? matchesBlockScope(scope, item.block) : true);
     setForm({
       ...emptyForm,
       village: defaultInstitute?.instituteName || "",
-      block: defaultInstitute?.block || (user?.role === "block_officer" || user?.role === "field_officer" ? user.region : ""),
+      block: defaultInstitute?.block || (scope.type !== "district" ? (scope.block ?? "") : ""),
       schemeName: schemes[0] || "",
     });
     setFormOpen(true);
@@ -187,7 +189,7 @@ export function SchemeBeneficiaryManagement({ records, schemes, user, isLoading 
       const errors = rows.flatMap((item, index) => {
         const error = validate(item, records);
         if (error) return [`Row ${index + 2}: ${error}`];
-        if ((user?.role === "block_officer" || user?.role === "field_officer") && !matchesBlock(user.region, item.block)) return [`Row ${index + 2}: block officers can only upload their assigned block.`];
+        if (scope.type !== "district" && !matchesBlockScope(scope, item.block)) return [`Row ${index + 2}: you can only upload beneficiaries for your assigned block.`];
         return [];
       });
       if (!rows.length) errors.push("The workbook does not contain data rows.");
@@ -312,7 +314,7 @@ export function SchemeBeneficiaryManagement({ records, schemes, user, isLoading 
             <DialogTitle>{editing ? "Edit Beneficiary" : "Add Beneficiary"}</DialogTitle>
             <DialogDescription>Beneficiary ID is generated automatically and the record is saved directly to the Beneficiaries sheet.</DialogDescription>
           </DialogHeader>
-          <BeneficiaryFormFields form={form} setForm={setForm} schemes={schemes} lockBlock={user?.role === "block_officer" || user?.role === "field_officer"} canApprove={canApprove} institutes={institutes} />
+          <BeneficiaryFormFields form={form} setForm={setForm} schemes={schemes} lockBlock={scope.type !== "district"} lockInstitute={scope.type === "institute"} scopeBlock={scope.block} canApprove={canApprove} institutes={institutes} />
           <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
             <Button variant="outline" className="h-10" onClick={() => setFormOpen(false)}>Cancel</Button>
             <Button onClick={save} disabled={saveMutation.isPending} className="h-10 bg-teal-700 hover:bg-teal-800">{saveMutation.isPending ? "Saving..." : "Save Beneficiary"}</Button>
@@ -333,8 +335,17 @@ export function SchemeBeneficiaryManagement({ records, schemes, user, isLoading 
   );
 }
 
-function BeneficiaryFormFields({ form, setForm, schemes, lockBlock, canApprove, institutes }: { form: BeneficiaryForm; setForm: React.Dispatch<React.SetStateAction<BeneficiaryForm>>; schemes: string[]; lockBlock: boolean; canApprove: boolean; institutes: InstituteRecord[] }) {
+function BeneficiaryFormFields({ form, setForm, schemes, lockBlock, lockInstitute, scopeBlock, canApprove, institutes }: { form: BeneficiaryForm; setForm: React.Dispatch<React.SetStateAction<BeneficiaryForm>>; schemes: string[]; lockBlock: boolean; lockInstitute: boolean; scopeBlock?: string; canApprove: boolean; institutes: InstituteRecord[] }) {
   const set = (key: keyof BeneficiaryForm, value: string | number) => setForm((current) => ({ ...current, [key]: value }));
+  const activeInstitutesForForm = institutes.filter((item) => {
+    if (item.status !== "Active") return false;
+    if (lockBlock && scopeBlock) {
+      const own = scopeBlock.trim().toLowerCase();
+      const target = item.block.trim().toLowerCase();
+      return own && target && (own.includes(target) || target.includes(own));
+    }
+    return true;
+  });
   return (
     <div className="space-y-5">
       <SectionTitle title="Registration Details" />
@@ -356,12 +367,12 @@ function BeneficiaryFormFields({ form, setForm, schemes, lockBlock, canApprove, 
                 block: selected?.block || current.block
               }));
             }}
-            options={institutes.filter((item) => item.status === "Active" && (!lockBlock || matchesBlock(form.block, item.block))).map((item) => item.instituteName)}
+            options={institutes.filter((item) => item.status === "Active" && (!lockBlock || matchesBlockScope({ type: "block", block: form.block }, item.block))).map((item) => item.instituteName)}
           />
         </Field>
         <Field label="Gram Panchayat"><Input value={form.gramPanchayat} onChange={(e) => set("gramPanchayat", e.target.value)} /></Field>
         <Field label="Block"><Input disabled value={form.block} onChange={(e) => set("block", e.target.value)} /></Field>
-        <Field label="Scheme"><FilterSelect value={form.schemeName} onChange={(value) => set("schemeName", value)} options={schemes} /></Field>
+        <Field label="Scheme"><SchemeCombobox value={form.schemeName} onChange={(value) => set("schemeName", value)} schemes={schemes} /></Field>
         <Field label="Father/Husband Name"><Input value={form.fatherHusbandName} onChange={(e) => set("fatherHusbandName", e.target.value)} /></Field>
         <Field label="Ration Card Number (Optional)"><Input value={form.rationCardNumber} onChange={(e) => set("rationCardNumber", e.target.value)} /></Field>
       </div>
@@ -502,6 +513,92 @@ function Field({ label, children, className = "" }: { label: string; children: R
 
 function SectionTitle({ title }: { title: string }) {
   return <div className="border-b pb-2 text-sm font-semibold text-slate-900">{title}</div>;
+}
+
+function SchemeCombobox({ value, onChange, schemes }: { value: string; onChange: (value: string) => void; schemes: string[] }) {
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState("");
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  const filtered = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return schemes;
+    return schemes.filter((name) => name.toLowerCase().includes(q));
+  }, [query, schemes]);
+
+  // Close on outside click
+  useEffect(() => {
+    function handleClick(e: MouseEvent) {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+        setOpen(false);
+        setQuery("");
+      }
+    }
+    if (open) document.addEventListener("mousedown", handleClick);
+    return () => document.removeEventListener("mousedown", handleClick);
+  }, [open]);
+
+  const select = (name: string) => {
+    onChange(name);
+    setOpen(false);
+    setQuery("");
+  };
+
+  return (
+    <div ref={containerRef} className="relative">
+      <button
+        type="button"
+        onClick={() => { setOpen((o) => !o); setQuery(""); }}
+        className="flex h-10 w-full items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
+      >
+        <span className={value ? "text-foreground" : "text-muted-foreground"}>
+          {value || "Select scheme"}
+        </span>
+        <ChevronDown className="h-4 w-4 shrink-0 opacity-50" />
+      </button>
+
+      {open && (
+        <div className="absolute z-50 mt-1 w-full rounded-md border bg-popover shadow-lg">
+          <div className="flex items-center border-b px-3">
+            <Search className="mr-2 h-4 w-4 shrink-0 text-muted-foreground" />
+            <input
+              autoFocus
+              className="flex h-10 w-full bg-transparent py-2 text-sm outline-none placeholder:text-muted-foreground"
+              placeholder="Search scheme..."
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  const match = filtered[0];
+                  if (match) select(match);
+                  else if (query.trim()) select(query.trim());
+                }
+                if (e.key === "Escape") { setOpen(false); setQuery(""); }
+              }}
+            />
+          </div>
+          <div className="max-h-56 overflow-y-auto p-1">
+            {filtered.length ? (
+              filtered.map((name) => (
+                <button
+                  key={name}
+                  type="button"
+                  onClick={() => select(name)}
+                  className={`flex w-full items-center rounded-sm px-3 py-2 text-sm hover:bg-accent hover:text-accent-foreground ${value === name ? "bg-accent font-medium" : ""}`}
+                >
+                  {name}
+                </button>
+              ))
+            ) : (
+              <p className="px-3 py-4 text-center text-sm text-muted-foreground">
+                {schemes.length === 0 ? "No schemes in Scheme Management yet." : "No matching scheme found."}
+              </p>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
 }
 
 function FilterSelect({ value, onChange, options, all }: { value: string; onChange: (value: string) => void; options: readonly string[]; all?: string }) {
@@ -663,12 +760,6 @@ function mask(value: string) {
 
 function unique(values: string[]) {
   return Array.from(new Set(values.filter(Boolean))).sort();
-}
-
-function matchesBlock(region: string, targetBlock: string) {
-  const own = String(region || "").toLowerCase();
-  const target = String(targetBlock || "").toLowerCase();
-  return !!own && !!target && (own.includes(target) || target.includes(own));
 }
 
 function shorten(value: string) {

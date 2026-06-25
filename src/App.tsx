@@ -14,6 +14,7 @@ import BeneficiariesPage from "./pages/BeneficiariesPage.tsx";
 import ProfilePage from "./pages/ProfilePage.tsx";
 import LoginPage from "./pages/LoginPage.tsx";
 import ManagementModulePage from "./pages/ManagementModulePage.tsx";
+import FieldOfficerDashboard from "./pages/FieldOfficerDashboard.tsx";
 import NotFound from "./pages/NotFound.tsx";
 
 const queryClient = new QueryClient({
@@ -38,6 +39,14 @@ function RoleRoute({ route, children }: { route: AppRouteKey; children: React.Re
   return hasRouteAccess(user.role, route) ? children : <NotFound />;
 }
 
+function DashboardRoute() {
+  const { user } = useUser();
+  if (user?.role === "field_officer" || user?.role === "veterinary_doctor") {
+    return <RoleRoute route="dashboard"><FieldOfficerDashboard /></RoleRoute>;
+  }
+  return <RoleRoute route="dashboard"><DashboardPage /></RoleRoute>;
+}
+
 function HomeRoute() {
   return <PublicHomePage />;
 }
@@ -53,7 +62,7 @@ const App = () => (
           <Routes>
             <Route path="/login" element={<LoginPage />} />
             <Route path="/" element={<HomeRoute />} />
-            <Route path="/dashboard" element={<RoleRoute route="dashboard"><DashboardPage /></RoleRoute>} />
+            <Route path="/dashboard" element={<DashboardRoute />} />
             <Route path="/schemes" element={<RoleRoute route="schemes"><SchemesPage /></RoleRoute>} />
             <Route path="/beneficiaries" element={<RoleRoute route="beneficiaries"><BeneficiariesPage /></RoleRoute>} />
             <Route path="/blocks" element={<RoleRoute route="blocks"><ManagementModulePage type="blocks" /></RoleRoute>} />

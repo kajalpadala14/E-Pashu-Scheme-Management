@@ -165,6 +165,7 @@ export interface SchemeDataRecord {
   id: string;
   financialYear: string;
   schemeName: string;
+  schemeLevel: "National" | "State" | "District";
   block: string;
   village: string;
   instituteId: string;
@@ -327,6 +328,7 @@ export interface UserDirectoryRecord {
   id: string;
   name: string;
   email: string;
+  phone: string;
   role: "admin" | "district_officer" | "veterinary_doctor" | "field_officer" | "block_officer" | "data_entry_operator" | "departmental_officer" | "deputy_director_vet";
   region: string;
   active: boolean;

@@ -17,6 +17,7 @@ import { getDashboardData, getPortalSettings, listInstitutes, listLocations, lis
 import { safeSelectOptions, safeSelectValue } from "@/lib/selectOptions";
 import type { InstituteRecord, LocationRecord, PortalSettingsRecord, SchemeBeneficiaryRecord, SchemeDataRecord, UserDirectoryRecord } from "@/lib/types";
 import { ROLE_OPTIONS, getRoleOptionLabel, type UserRole } from "@/lib/rbac";
+import { getUserDataScope, filterInstitutesByScope, filterSchemesByScope, filterBeneficiariesByScope } from "@/lib/data-scope";
 
 type ModuleType = "blocks" | "institutes" | "reports" | "users" | "settings";
 
@@ -521,9 +522,14 @@ function getPerformanceColor(percent: number) {
 }
 
 function InstituteManagementPanel() {
-  const { data: institutes = [], isLoading } = useQuery({ queryKey: ["institutes"], queryFn: listInstitutes, staleTime: 5 * 60 * 1000, refetchOnWindowFocus: true });
-  const { data: schemeRecords = [] } = useQuery({ queryKey: ["schemeDataRecords"], queryFn: listSchemeDataRecords, staleTime: 5 * 60 * 1000, refetchOnWindowFocus: true });
-  const { data: beneficiaryRecords = [] } = useQuery({ queryKey: ["schemeBeneficiaryRecords"], queryFn: listSchemeBeneficiaryRecords, staleTime: 5 * 60 * 1000, refetchOnWindowFocus: true });
+  const { user } = useUser();
+  const scope = useMemo(() => getUserDataScope(user), [user]);
+  const { data: rawInstitutes = [], isLoading } = useQuery({ queryKey: ["institutes"], queryFn: listInstitutes, staleTime: 5 * 60 * 1000, refetchOnWindowFocus: true });
+  const { data: rawSchemeRecords = [] } = useQuery({ queryKey: ["schemeDataRecords"], queryFn: listSchemeDataRecords, staleTime: 5 * 60 * 1000, refetchOnWindowFocus: true });
+  const { data: rawBeneficiaryRecords = [] } = useQuery({ queryKey: ["schemeBeneficiaryRecords"], queryFn: listSchemeBeneficiaryRecords, staleTime: 5 * 60 * 1000, refetchOnWindowFocus: true });
+  const institutes = useMemo(() => filterInstitutesByScope(rawInstitutes, scope), [rawInstitutes, scope]);
+  const schemeRecords = useMemo(() => filterSchemesByScope(rawSchemeRecords, scope), [rawSchemeRecords, scope]);
+  const beneficiaryRecords = useMemo(() => filterBeneficiariesByScope(rawBeneficiaryRecords, scope), [rawBeneficiaryRecords, scope]);
   
   const [search, setSearch] = useState("");
   const [block, setBlock] = useState("All Blocks");
@@ -1325,9 +1331,14 @@ function ReportsAnalyticsPanel() {
               <h2 className="mt-1 text-2xl font-bold tracking-tight">Reports & Analytics</h2>
               <p className="mt-1 text-sm text-muted-foreground">Monitor livestock schemes, targets, achievements, and physical progress percentages.</p>
             </div>
-            <Badge variant="outline" className="w-fit border-teal-200 bg-teal-50 px-3 py-1.5 text-teal-700">
-              District analytics dashboard
-            </Badge>
+            <div className="flex flex-wrap items-center gap-2">
+              <Button variant="outline" className="h-10 border-teal-200 text-teal-700 hover:bg-teal-50" onClick={exportCurrentReportPdf}>
+                <FileText className="mr-2 h-4 w-4" /> Export PDF
+              </Button>
+              <Button variant="outline" className="h-10 border-emerald-200 text-emerald-700 hover:bg-emerald-50" onClick={exportCurrentReportExcel}>
+                <Download className="mr-2 h-4 w-4" /> Export Excel
+              </Button>
+            </div>
           </div>
         </div>
 
@@ -1662,7 +1673,7 @@ function toAdminUserRecord(user: UserDirectoryRecord): AdminUserRecord {
     id: user.id,
     name: user.name,
     email: user.email,
-    mobile: "",
+    mobile: user.phone || "",
     designation: roleLabel,
     role: roleLabel,
     assignedBlock: user.region || "All Blocks",
@@ -1774,6 +1785,7 @@ function UserManagementPanel() {
                 }}
                 isSaving={saveMutation.isPending}
                 blocks={userBlocks}
+                institutes={institutes}
                 onCreate={openCreateDialog}
               />
               <Button variant="outline" className="h-10 border-emerald-200 text-emerald-700 hover:bg-emerald-50" onClick={() => void exportRecordsToXlsx(filteredUsers, "user-directory.xlsx")}><Download className="mr-2 h-4 w-4" /> Export Users</Button>
@@ -1938,6 +1950,7 @@ function AddUserDialog({
   onSave,
   isSaving,
   blocks,
+  institutes,
   onCreate,
 }: {
   open: boolean;
@@ -1946,24 +1959,43 @@ function AddUserDialog({
   onSave: (input: Omit<UserDirectoryRecord, "createdAt" | "updatedAt"> & Partial<Pick<UserDirectoryRecord, "createdAt" | "updatedAt">>) => Promise<unknown>;
   isSaving: boolean;
   blocks: string[];
+  institutes: InstituteRecord[];
   onCreate: () => void;
 }) {
   const [submitting, setSubmitting] = useState(false);
+  // Parse region: could be "BlockName" or "BlockName / InstituteName"
+  function parseRegion(region: string) {
+    const parts = String(region || "").split("/").map((p) => p.trim());
+    return { block: parts[0] || "", institute: parts[1] || "" };
+  }
+
+  const initialParsed = parseRegion(initialUser?.assignedBlock && initialUser.assignedBlock !== "All Blocks" ? initialUser.assignedBlock : "");
+
   const [form, setForm] = useState({
     name: initialUser?.name || "",
     email: initialUser?.email || "",
+    phone: initialUser?.mobile || "",
     role: ROLE_OPTIONS.find((option) => option.label === initialUser?.role)?.value || ROLE_OPTIONS[0].value,
-    region: initialUser?.assignedBlock && initialUser.assignedBlock !== "All Blocks" ? initialUser.assignedBlock : "",
+    assignedBlock: initialParsed.block,
+    assignedInstitute: initialParsed.institute,
     active: initialUser?.status !== "Inactive",
   });
 
+  const isInstituteRole = (role: string) => role === "field_officer" || role === "veterinary_doctor";
+  const filteredInstitutes = form.assignedBlock
+    ? institutes.filter((i) => i.status === "Active" && i.block.trim().toLowerCase() === form.assignedBlock.trim().toLowerCase())
+    : institutes.filter((i) => i.status === "Active");
+
   useEffect(() => {
+    const parsed = parseRegion(initialUser?.assignedBlock && initialUser.assignedBlock !== "All Blocks" ? initialUser.assignedBlock : "");
     setSubmitting(false);
     setForm({
       name: initialUser?.name || "",
       email: initialUser?.email || "",
+      phone: initialUser?.mobile || "",
       role: ROLE_OPTIONS.find((option) => option.label === initialUser?.role)?.value || ROLE_OPTIONS[0].value,
-      region: initialUser?.assignedBlock && initialUser.assignedBlock !== "All Blocks" ? initialUser.assignedBlock : "",
+      assignedBlock: parsed.block,
+      assignedInstitute: parsed.institute,
       active: initialUser?.status !== "Inactive",
     });
   }, [initialUser, open]);
@@ -1982,12 +2014,16 @@ function AddUserDialog({
     }
     setSubmitting(true);
     try {
+      const region = isInstituteRole(form.role) && form.assignedInstitute
+        ? `${form.assignedBlock} / ${form.assignedInstitute}`.trim()
+        : form.assignedBlock;
       await onSave({
         id: initialUser?.id,
         name,
         email,
+        phone: form.phone.trim(),
         role: form.role,
-        region: form.region,
+        region,
         active: form.active,
       });
     } finally {
@@ -2007,9 +2043,19 @@ function AddUserDialog({
         <div className="grid gap-3 sm:grid-cols-2">
           <FormInput label="Full Name" value={form.name} onChange={(value) => setForm((current) => ({ ...current, name: value }))} placeholder="Enter full name" />
           <FormInput label="Email" value={form.email} onChange={(value) => setForm((current) => ({ ...current, email: value }))} placeholder="user@epashu.gov" />
-          <FormSelect label="Role" value={form.role} options={ROLE_OPTIONS.map((item) => item.label)} onChange={(value) => setForm((current) => ({ ...current, role: ROLE_OPTIONS.find((item) => item.label === value)?.value || current.role }))} />
-          <FormSelect label="Assigned Block" value={form.region || "All Blocks"} options={blocks} onChange={(value) => setForm((current) => ({ ...current, region: value === "All Blocks" ? "" : value }))} />
-          <FormInput label="Username" value={form.email.split("@")[0] || ""} onChange={() => {}} placeholder="username" />
+          <FormInput label="Phone Number" type="tel" value={form.phone} onChange={(value) => setForm((current) => ({ ...current, phone: value.replace(/\D/g, "").slice(0, 10) }))} placeholder="10-digit mobile number" />
+          <FormSelect label="Role" value={ROLE_OPTIONS.find((item) => item.value === form.role)?.label || form.role} options={ROLE_OPTIONS.map((item) => item.label)} onChange={(value) => setForm((current) => ({ ...current, role: ROLE_OPTIONS.find((item) => item.label === value)?.value || current.role, assignedInstitute: "" }))} />
+          <FormSelect label="Assigned Block" value={form.assignedBlock || "All Blocks"} options={blocks} onChange={(value) => setForm((current) => ({ ...current, assignedBlock: value === "All Blocks" ? "" : value, assignedInstitute: "" }))} />
+          {isInstituteRole(form.role) ? (
+            <FormSelect
+              label="Assigned Institute"
+              value={form.assignedInstitute || "No Institute"}
+              options={["No Institute", ...filteredInstitutes.map((i) => i.instituteName)]}
+              onChange={(value) => setForm((current) => ({ ...current, assignedInstitute: value === "No Institute" ? "" : value }))}
+            />
+          ) : (
+            <FormInput label="Username" value={form.email.split("@")[0] || ""} onChange={() => {}} placeholder="username" />
+          )}
           <FormSelect label="Status" value={form.active ? "Active" : "Inactive"} options={["Active", "Inactive"]} onChange={(value) => setForm((current) => ({ ...current, active: value === "Active" }))} />
         </div>
         <div className="flex justify-end gap-2">

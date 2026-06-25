@@ -45,7 +45,7 @@ const routePermissions: Record<AppRouteKey, UserRole[]> = {
   employees: ["departmental_officer"],
   ai_insights: [],
   reports: ["district_officer", "block_officer", "data_entry_operator", "veterinary_doctor", "field_officer", "departmental_officer", "deputy_director_vet"],
-  schemes: ["district_officer", "block_officer", "data_entry_operator", "field_officer", "veterinary_doctor", "departmental_officer", "deputy_director_vet"],
+  schemes: ["district_officer", "block_officer", "data_entry_operator", "departmental_officer", "deputy_director_vet"],
   beneficiaries: ["district_officer", "block_officer", "data_entry_operator", "field_officer", "veterinary_doctor", "departmental_officer", "deputy_director_vet"],
   blocks: ["district_officer", "block_officer", "data_entry_operator", "departmental_officer", "deputy_director_vet"],
   institutes: ["district_officer", "block_officer", "data_entry_operator", "field_officer", "veterinary_doctor", "departmental_officer", "deputy_director_vet"],
