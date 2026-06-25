@@ -628,15 +628,15 @@ function SchemeRecordForm({ form, setForm, institutes, schemeNames, submitted }:
   return <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
     <FormField label="Financial Year" required error={fieldError}><FilterSelect value={form.financialYear} onChange={(value) => set("financialYear", value)} options={financialYears} /></FormField>
     <FormField label="Scheme Name" required error={fieldError}><Input value={form.schemeName} onChange={(event) => set("schemeName", event.target.value)} list="scheme-name-options" className="h-10 rounded-lg" /><datalist id="scheme-name-options">{schemeNames.map((name) => <option key={name} value={name} />)}</datalist></FormField>
+    <FormField label="Block" required error={fieldError}>
+      <FilterSelect value={form.block} onChange={setBlock} options={blockOptions} />
+    </FormField>
     <FormField label="Institute Name" required error={fieldError}>
       {instituteOptions.length ? (
         <FilterSelect value={form.instituteName || displayInstituteName(form)} onChange={setInstitute} options={instituteOptions} />
       ) : (
         <Input value={form.instituteName || displayInstituteName(form)} onChange={(event) => setInstitute(event.target.value)} placeholder="Enter institute name" className="h-10 rounded-lg" />
       )}
-    </FormField>
-    <FormField label="Block" required error={fieldError}>
-      <FilterSelect value={form.block} onChange={setBlock} options={blockOptions} />
     </FormField>
     <FormField label="Target" required><NumberInput value={form.target} onChange={(value) => set("target", value)} /></FormField>
     <FormField label="Achievement" required><NumberInput value={form.distributedUnits} onChange={(value) => { set("distributedUnits", value); set("approvedCases", value); }} /></FormField>
