@@ -209,7 +209,7 @@ export default function SchemesPage() {
       achievement,
       financial: sum(dashboardRecords, "financialProgressAmount"),
       totalSchemes: unique(dashboardRecords.map((item) => item.schemeName)).length,
-      totalBeneficiaries: filteredBeneficiaries.length,
+      totalBeneficiaries: sum(dashboardRecords, "totalBeneficiaries") || filteredBeneficiaries.length,
       coverage: target ? Math.round((achievement / target) * 100) : 0,
     };
   }, [dashboardRecords, filteredBeneficiaries.length]);
@@ -580,12 +580,19 @@ export default function SchemesPage() {
         </DialogContent>
       </Dialog>
 
-      <Dialog open={formOpen} onOpenChange={setFormOpen}>
+      <Dialog open={formOpen} onOpenChange={(open) => {
+          if (!open) {
+            setFormOpen(false);
+            setEditingRecord(null);
+            setFormSubmitted(false);
+            setForm({ ...emptyForm });
+          }
+        }}>
         <DialogContent className="max-h-[90vh] max-w-4xl overflow-y-auto">
           <DialogHeader><DialogTitle>{editingRecord ? "Edit Scheme Record" : "Add Scheme"}</DialogTitle><DialogDescription>Fields are saved directly to the Schemes sheet.</DialogDescription></DialogHeader>
           <SchemeRecordForm form={form} setForm={setForm} institutes={institutes} schemeNames={schemeNames} submitted={formSubmitted} />
           <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
-            <Button variant="outline" onClick={() => setFormOpen(false)} className="h-10 w-full sm:w-auto">Cancel</Button>
+            <Button variant="outline" onClick={() => { setFormOpen(false); setEditingRecord(null); setFormSubmitted(false); setForm({ ...emptyForm }); }} className="h-10 w-full sm:w-auto">Cancel</Button>
             <Button onClick={submitForm} disabled={saveMutation.isPending} className="h-10 w-full sm:min-w-36 sm:w-auto">{saveMutation.isPending ? "Saving..." : "Save Scheme"}</Button>
           </div>
         </DialogContent>
@@ -610,6 +617,12 @@ function CompactKpi({ label, value, hint, icon: Icon, tone = "primary" }: { labe
 
 function SchemeRecordForm({ form, setForm, institutes, schemeNames, submitted }: { form: SchemeForm; setForm: React.Dispatch<React.SetStateAction<SchemeForm>>; institutes: InstituteRecord[]; schemeNames: string[]; submitted: boolean }) {
   const set = (key: keyof SchemeForm, value: string | number) => setForm((current) => ({ ...current, [key]: value }));
+  const setCasteCount = (key: keyof SchemeForm, value: number) => {
+    setForm((current) => {
+      const updated = { ...current, [key]: value };
+      return { ...updated, totalBeneficiaries: casteTotal(updated) };
+    });
+  };
   const total = casteTotal(form);
   const errors = submitted ? validateSchemeRecord(form) : "";
   const fieldError = submitted && errors ? errors : "";
@@ -627,12 +640,16 @@ function SchemeRecordForm({ form, setForm, institutes, schemeNames, submitted }:
     </FormField>
     <FormField label="Target" required><NumberInput value={form.target} onChange={(value) => set("target", value)} /></FormField>
     <FormField label="Achievement"><NumberInput value={form.distributedUnits} onChange={(value) => { set("distributedUnits", value); set("approvedCases", value); }} /></FormField>
-    <FormField label="SC Count"><NumberInput value={form.scCount} onChange={(value) => set("scCount", value)} /></FormField>
-    <FormField label="ST Count"><NumberInput value={form.stCount} onChange={(value) => set("stCount", value)} /></FormField>
-    <FormField label="OBC Count"><NumberInput value={form.obcCount} onChange={(value) => set("obcCount", value)} /></FormField>
-    <FormField label="General Count"><NumberInput value={form.generalCount} onChange={(value) => set("generalCount", value)} /></FormField>
-    <FormField label="Other Count"><NumberInput value={form.otherCount} onChange={(value) => set("otherCount", value)} /></FormField>
-    <FormField label="Total Beneficiaries"><Input value={total} disabled className="h-10 rounded-lg" /></FormField>
+    <FormField label="SC Count"><NumberInput value={form.scCount} onChange={(value) => setCasteCount("scCount", value)} /></FormField>
+    <FormField label="ST Count"><NumberInput value={form.stCount} onChange={(value) => setCasteCount("stCount", value)} /></FormField>
+    <FormField label="OBC Count"><NumberInput value={form.obcCount} onChange={(value) => setCasteCount("obcCount", value)} /></FormField>
+    <FormField label="General Count"><NumberInput value={form.generalCount} onChange={(value) => setCasteCount("generalCount", value)} /></FormField>
+    <FormField label="Other Count"><NumberInput value={form.otherCount} onChange={(value) => setCasteCount("otherCount", value)} /></FormField>
+    <FormField label="Total Beneficiaries (Auto)">
+      <div className="flex h-10 items-center rounded-lg border border-input bg-muted px-3 text-sm font-semibold text-slate-700">
+        {total}
+      </div>
+    </FormField>
     <FormField label="Remarks" className="sm:col-span-2 lg:col-span-3"><Textarea value={form.remarks} onChange={(event) => set("remarks", event.target.value)} className="min-h-24 rounded-lg" /></FormField>
     {submitted && errors ? <p className="sm:col-span-2 lg:col-span-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{errors}</p> : null}
   </div>;
