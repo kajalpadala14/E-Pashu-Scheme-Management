@@ -1050,7 +1050,16 @@ export async function updateSchemeDataRecord(input: SchemeDataRecord): Promise<S
 }
 
 export async function deleteSchemeDataRecord(id: string): Promise<{ id: string; deleted: boolean }> {
-  return callAppsScript<{ id: string; deleted: boolean }>("schemeData.delete", { id });
+  try {
+    return await callAppsScript<{ id: string; deleted: boolean }>("schemeData.delete", { id });
+  } catch (error) {
+    const msg = error instanceof Error ? error.message : String(error || "");
+    if (!msg.toLowerCase().includes("unsupported action")) {
+      throw error;
+    }
+    // Fallback: try alternate action name used in some deployments
+    return callAppsScript<{ id: string; deleted: boolean }>("schemes.delete", { id });
+  }
 }
 
 export async function bulkUpsertSchemeDataRecords(records: Array<Partial<SchemeDataRecord>>): Promise<{ saved: number; records: SchemeDataRecord[] }> {
